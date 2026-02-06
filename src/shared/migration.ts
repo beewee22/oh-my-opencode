@@ -86,6 +86,7 @@ export const MODEL_TO_CATEGORY_MAP: Record<string, string> = {
   "openai/gpt-5.2": "ultrabrain",
   "anthropic/claude-haiku-4-5": "quick",
   "anthropic/claude-opus-4-5": "unspecified-high",
+  "anthropic/claude-opus-4-6": "unspecified-high",
   "anthropic/claude-sonnet-4-5": "unspecified-low",
 }
 
