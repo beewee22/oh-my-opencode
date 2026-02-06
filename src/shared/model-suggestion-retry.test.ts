@@ -1,5 +1,45 @@
 import { describe, it, expect, mock } from "bun:test"
+import type { PromptClient } from "./model-suggestion-retry"
 import { parseModelSuggestion, promptWithModelSuggestionRetry } from "./model-suggestion-retry"
+
+function createClient(promptMock: ReturnType<typeof mock>): PromptClient {
+  const prompt: PromptClient["session"]["prompt"] = ((
+    args: Parameters<PromptClient["session"]["prompt"]>[0]
+  ) => {
+    return Promise.resolve(promptMock(args)) as unknown as ReturnType<
+      PromptClient["session"]["prompt"]
+    >
+  }) as unknown as PromptClient["session"]["prompt"]
+
+  return {
+    session: {
+      prompt,
+    },
+    provider: {
+      list: async () => ({ data: { connected: ["amazon-bedrock", "anthropic"] } }),
+    },
+    model: {
+      list: async () => ({
+        data: [
+          { provider: "anthropic", id: "claude-opus-4-6" },
+          { provider: "amazon-bedrock", id: "claude-opus-4-6" },
+        ],
+      }),
+    },
+  }
+}
+
+function getCallBody(callArg: unknown): Record<string, unknown> {
+  if (!callArg || typeof callArg !== "object") {
+    throw new Error("Expected call argument to be an object")
+  }
+  const obj = callArg as Record<string, unknown>
+  const body = obj.body
+  if (!body || typeof body !== "object") {
+    throw new Error("Expected call argument to contain body object")
+  }
+  return body as Record<string, unknown>
+}
 
 describe("parseModelSuggestion", () => {
   describe("structured NamedError format", () => {
@@ -214,10 +254,10 @@ describe("promptWithModelSuggestionRetry", () => {
   it("should succeed on first try without retry", async () => {
     // given a client where prompt succeeds
     const promptMock = mock(() => Promise.resolve())
-    const client = { session: { prompt: promptMock } }
+    const client = createClient(promptMock)
 
     // when calling promptWithModelSuggestionRetry
-    await promptWithModelSuggestionRetry(client as any, {
+    await promptWithModelSuggestionRetry(client, {
       path: { id: "session-1" },
       body: {
         parts: [{ type: "text", text: "hello" }],
@@ -241,10 +281,10 @@ describe("promptWithModelSuggestionRetry", () => {
         },
       })
       .mockResolvedValueOnce(undefined)
-    const client = { session: { prompt: promptMock } }
+    const client = createClient(promptMock)
 
     // when calling promptWithModelSuggestionRetry
-    await promptWithModelSuggestionRetry(client as any, {
+    await promptWithModelSuggestionRetry(client, {
       path: { id: "session-1" },
       body: {
         agent: "explore",
@@ -266,12 +306,12 @@ describe("promptWithModelSuggestionRetry", () => {
     // given a client that fails with a non-model-not-found error
     const originalError = new Error("Connection refused")
     const promptMock = mock().mockRejectedValueOnce(originalError)
-    const client = { session: { prompt: promptMock } }
+    const client = createClient(promptMock)
 
     // when calling promptWithModelSuggestionRetry
     // then should throw the original error
     await expect(
-      promptWithModelSuggestionRetry(client as any, {
+      promptWithModelSuggestionRetry(client, {
         path: { id: "session-1" },
         body: {
           parts: [{ type: "text", text: "hello" }],
@@ -297,12 +337,12 @@ describe("promptWithModelSuggestionRetry", () => {
     const promptMock = mock()
       .mockRejectedValueOnce(modelNotFoundError)
       .mockRejectedValueOnce(retryError)
-    const client = { session: { prompt: promptMock } }
+    const client = createClient(promptMock)
 
     // when calling promptWithModelSuggestionRetry
     // then should throw the retry error (not the original)
     await expect(
-      promptWithModelSuggestionRetry(client as any, {
+      promptWithModelSuggestionRetry(client, {
         path: { id: "session-1" },
         body: {
           parts: [{ type: "text", text: "hello" }],
@@ -326,10 +366,10 @@ describe("promptWithModelSuggestionRetry", () => {
         },
       })
       .mockResolvedValueOnce(undefined)
-    const client = { session: { prompt: promptMock } }
+    const client = createClient(promptMock)
 
     // when calling with additional body fields
-    await promptWithModelSuggestionRetry(client as any, {
+    await promptWithModelSuggestionRetry(client, {
       path: { id: "session-1" },
       body: {
         agent: "explore",
@@ -337,7 +377,7 @@ describe("promptWithModelSuggestionRetry", () => {
         tools: { task: false },
         parts: [{ type: "text", text: "hello" }],
         model: { providerID: "anthropic", modelID: "claude-sonet-4" },
-        variant: "max",
+        noReply: true,
       },
     })
 
@@ -346,7 +386,7 @@ describe("promptWithModelSuggestionRetry", () => {
     expect(retryCall.body.agent).toBe("explore")
     expect(retryCall.body.system).toBe("You are a helpful agent")
     expect(retryCall.body.tools).toEqual({ task: false })
-    expect(retryCall.body.variant).toBe("max")
+    expect(retryCall.body.noReply).toBe(true)
     expect(retryCall.body.model).toEqual({
       providerID: "anthropic",
       modelID: "claude-sonnet-4",
@@ -360,10 +400,10 @@ describe("promptWithModelSuggestionRetry", () => {
         new Error("Model not found: anthropic/claude-sonet-4. Did you mean: claude-sonnet-4?")
       )
       .mockResolvedValueOnce(undefined)
-    const client = { session: { prompt: promptMock } }
+    const client = createClient(promptMock)
 
     // when calling promptWithModelSuggestionRetry
-    await promptWithModelSuggestionRetry(client as any, {
+    await promptWithModelSuggestionRetry(client, {
       path: { id: "session-1" },
       body: {
         parts: [{ type: "text", text: "hello" }],
@@ -383,15 +423,97 @@ describe("promptWithModelSuggestionRetry", () => {
       "Model not found: anthropic/claude-sonet-4. Did you mean: claude-sonnet-4?"
     )
     const promptMock = mock().mockRejectedValueOnce(modelNotFoundError)
-    const client = { session: { prompt: promptMock } }
+    const client = createClient(promptMock)
 
     // when calling without model in body
     // then should throw without retrying
     await expect(
-      promptWithModelSuggestionRetry(client as any, {
+      promptWithModelSuggestionRetry(client, {
         path: { id: "session-1" },
         body: {
           parts: [{ type: "text", text: "hello" }],
+        },
+      })
+    ).rejects.toThrow()
+
+    expect(promptMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("should retry with amazon-bedrock when Anthropic quota is exhausted", async () => {
+    // given a client that fails with quota error first, then succeeds
+    const promptMock = mock()
+      .mockRejectedValueOnce({ status: 429, message: "insufficient_quota" })
+      .mockResolvedValueOnce(undefined)
+    const client = createClient(promptMock)
+
+    // when calling promptWithModelSuggestionRetry
+    await promptWithModelSuggestionRetry(client, {
+      path: { id: "session-1" },
+      body: {
+        agent: "sisyphus",
+        parts: [{ type: "text", text: "hello" }],
+        model: { providerID: "anthropic", modelID: "claude-opus-4-6" },
+        noReply: true,
+      },
+    })
+
+    // then should retry once with amazon-bedrock provider and preserve modelID
+    expect(promptMock).toHaveBeenCalledTimes(2)
+    const retryCallArg = promptMock.mock.calls[1]?.[0] as unknown
+    const retryBody = getCallBody(retryCallArg)
+    expect(retryBody.model).toEqual({
+      providerID: "amazon-bedrock",
+      modelID: "claude-opus-4-6",
+    })
+    expect(retryBody.noReply).toBe(true)
+  })
+
+  it("should not retry with amazon-bedrock when no bedrock alias exists", async () => {
+    // given - quota error but bedrock model list does not include an alias for the same model ID
+    const promptMock = mock().mockRejectedValueOnce({ status: 429, message: "quota exceeded" })
+    const client: PromptClient = {
+      ...createClient(promptMock),
+      provider: {
+        list: async () => ({ data: { connected: ["amazon-bedrock", "anthropic"] } }),
+      },
+      model: {
+        list: async () => ({
+          data: [
+            { provider: "anthropic", id: "claude-opus-4-6" },
+            // Note: bedrock has a different ID; no alias
+            { provider: "amazon-bedrock", id: "anthropic.claude-opus-4-6-20260206-v1:0" },
+          ],
+        }),
+      },
+    }
+
+    // when / then - should throw without retrying
+    await expect(
+      promptWithModelSuggestionRetry(client, {
+        path: { id: "session-1" },
+        body: {
+          agent: "sisyphus",
+          parts: [{ type: "text", text: "hello" }],
+          model: { providerID: "anthropic", modelID: "claude-opus-4-6" },
+        },
+      })
+    ).rejects.toThrow()
+
+    expect(promptMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("should not retry with amazon-bedrock when provider is not anthropic", async () => {
+    // given a quota-like error but non-anthropic provider
+    const promptMock = mock().mockRejectedValueOnce({ status: 429, message: "quota exceeded" })
+    const client = createClient(promptMock)
+
+    // when / then - should throw without retrying
+    await expect(
+      promptWithModelSuggestionRetry(client, {
+        path: { id: "session-1" },
+        body: {
+          parts: [{ type: "text", text: "hello" }],
+          model: { providerID: "openai", modelID: "gpt-5.2" },
         },
       })
     ).rejects.toThrow()

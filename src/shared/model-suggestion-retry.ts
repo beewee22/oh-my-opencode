@@ -1,7 +1,25 @@
 import type { createOpencodeClient } from "@opencode-ai/sdk"
 import { log } from "./logger"
+import { fuzzyMatchModel } from "./model-availability"
 
-type Client = ReturnType<typeof createOpencodeClient>
+type OpencodeClient = ReturnType<typeof createOpencodeClient>
+type PromptFn = OpencodeClient["session"]["prompt"]
+
+export interface PromptClient {
+  session: {
+    prompt: PromptFn
+  }
+  // Optional: available on some SDK/client versions.
+  // We keep this loose because OpenCode SDK types may not include these fields.
+  model?: {
+    list?: () => Promise<unknown>
+  }
+  provider?: {
+    list?: () => Promise<unknown>
+  }
+}
+
+type PromptArgs = Parameters<PromptFn>[0]
 
 export interface ModelSuggestionInfo {
   providerID: string
@@ -69,26 +87,151 @@ export function parseModelSuggestion(error: unknown): ModelSuggestionInfo | null
   return null
 }
 
-interface PromptBody {
-  model?: { providerID: string; modelID: string }
-  [key: string]: unknown
+function hasNumericProp(obj: Record<string, unknown>, key: string): obj is Record<string, number> {
+  return typeof obj[key] === "number"
 }
 
-interface PromptArgs {
-  path: { id: string }
-  body: PromptBody
-  [key: string]: unknown
+function hasStringProp(obj: Record<string, unknown>, key: string): obj is Record<string, string> {
+  return typeof obj[key] === "string"
+}
+
+function isAnthropicQuotaExhausted(error: unknown): boolean {
+  const message = extractMessage(error)
+  const lower = message.toLowerCase()
+
+  // Primary: explicit quota/credit/billing signals
+  const keywordHit =
+    lower.includes("insufficient_quota") ||
+    lower.includes("quota") ||
+    lower.includes("billing") ||
+    lower.includes("credit") ||
+    lower.includes("exceeded")
+
+  if (!keywordHit) {
+    return false
+  }
+
+  // If we can read a status code, be stricter.
+  if (error && typeof error === "object") {
+    const obj = error as Record<string, unknown>
+    if (hasNumericProp(obj, "status")) {
+      // 429: rate limit / quota, 402: payment required, 403: forbidden (sometimes quota)
+      return obj.status === 429 || obj.status === 402 || obj.status === 403
+    }
+    if (hasNumericProp(obj, "statusCode")) {
+      return obj.statusCode === 429 || obj.statusCode === 402 || obj.statusCode === 403
+    }
+    if (hasStringProp(obj, "name")) {
+      const nameLower = obj.name.toLowerCase()
+      if (nameLower.includes("quota") || nameLower.includes("insufficient") || nameLower.includes("rate")) {
+        return true
+      }
+    }
+  }
+
+  // Otherwise, rely on message pattern.
+  return (
+    lower.includes("insufficient_quota") ||
+    lower.includes("exceeded your") ||
+    lower.includes("quota exceeded") ||
+    lower.includes("exceeded")
+  )
+}
+
+async function listAvailableModelsFromClient(client: PromptClient): Promise<Set<string>> {
+  const modelSet = new Set<string>()
+
+  const listFn = client.model?.list
+  if (typeof listFn !== "function") {
+    return modelSet
+  }
+
+  const result = await listFn()
+  const data = (result as { data?: unknown }).data
+  if (!Array.isArray(data)) {
+    return modelSet
+  }
+
+  for (const item of data) {
+    if (!item || typeof item !== "object") continue
+    const rec = item as Record<string, unknown>
+    if (hasStringProp(rec, "provider") && hasStringProp(rec, "id")) {
+      modelSet.add(`${rec.provider}/${rec.id}`)
+    }
+  }
+
+  return modelSet
+}
+
+function getModelIdFromFullModel(model: string): string {
+  const slashIndex = model.indexOf("/")
+  if (slashIndex === -1) return model
+  return model.slice(slashIndex + 1)
 }
 
 export async function promptWithModelSuggestionRetry(
-  client: Client,
+  client: PromptClient,
   args: PromptArgs,
 ): Promise<void> {
+  if (!args.body) {
+    throw new Error("promptWithModelSuggestionRetry: args.body is required")
+  }
+  if (!args.body.parts) {
+    throw new Error("promptWithModelSuggestionRetry: args.body.parts is required")
+  }
+
+  const originalBody = args.body
+
   try {
-    await client.session.prompt(args as Parameters<typeof client.session.prompt>[0])
+    await client.session.prompt(args)
   } catch (error) {
     const suggestion = parseModelSuggestion(error)
-    if (!suggestion || !args.body.model) {
+    if (!suggestion || !originalBody.model) {
+      // Special-case: Anthropic quota exhaustion -> retry with Amazon Bedrock Claude (same model ID)
+      const model = originalBody.model
+      if (
+        model &&
+        model.providerID === "anthropic" &&
+        model.modelID.toLowerCase().includes("claude") &&
+        isAnthropicQuotaExhausted(error)
+      ) {
+        const availableModels = await listAvailableModelsFromClient(client)
+
+        // Safety: only fallback if we can find an amazon-bedrock model that matches
+        // the original Anthropic model ID (typically via an alias in provider config).
+        const preferredTarget = `amazon-bedrock/${model.modelID}`
+        const preferredMatch = fuzzyMatchModel(preferredTarget, availableModels, ["amazon-bedrock"])
+        if (!preferredMatch) {
+          const bedrockConnected = Array.from(availableModels).some((m) => m.startsWith("amazon-bedrock/"))
+          log("[model-suggestion-retry] Anthropic quota exhausted but no bedrock alias found - not retrying", {
+            original: `${model.providerID}/${model.modelID}`,
+            attempted: preferredTarget,
+            bedrockConnected,
+          })
+          throw error
+        }
+
+        const bedrockModelID = getModelIdFromFullModel(preferredMatch)
+
+        log("[model-suggestion-retry] Anthropic quota exhausted, retrying via amazon-bedrock", {
+          original: `${model.providerID}/${model.modelID}`,
+          fallback: `amazon-bedrock/${bedrockModelID}`,
+        })
+
+        await client.session.prompt({
+          ...args,
+          body: {
+            ...originalBody,
+            parts: originalBody.parts,
+            model: {
+              providerID: "amazon-bedrock",
+              modelID: bedrockModelID,
+            },
+          },
+        })
+        return
+      }
+
       throw error
     }
 
@@ -100,12 +243,13 @@ export async function promptWithModelSuggestionRetry(
     await client.session.prompt({
       ...args,
       body: {
-        ...args.body,
+        ...originalBody,
+        parts: originalBody.parts,
         model: {
           providerID: suggestion.providerID,
           modelID: suggestion.suggestion,
         },
       },
-    } as Parameters<typeof client.session.prompt>[0])
+    })
   }
 }

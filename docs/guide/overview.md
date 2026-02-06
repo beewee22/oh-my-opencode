@@ -157,6 +157,8 @@ Run `opencode models` to see all available models in your environment. Model nam
 
 For detailed configuration options including per-agent settings, category customization, and more, see the [Configuration Guide](../configurations.md).
 
+If you want to safely fall back from Anthropic Claude to AWS Bedrock when quota is exhausted, see: [Bedrock Fallback Guide](./bedrock-fallback.md).
+
 ---
 
 ## Next Steps
