@@ -81,6 +81,7 @@ export type BuiltinAgentName =
   | "momus"
   | "atlas"
   | "git-owner"
+  | "k8s-owner"
 
 export type OverridableAgentName =
   | "build"
