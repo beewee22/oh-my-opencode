@@ -12,6 +12,7 @@ import { createMetisAgent, metisPromptMetadata } from "./metis"
 import { createAtlasAgent, atlasPromptMetadata } from "./atlas"
 import { createMomusAgent, momusPromptMetadata } from "./momus"
 import { createHephaestusAgent } from "./hephaestus"
+import { createGitOwnerAgent, GIT_OWNER_PROMPT_METADATA } from "./git-owner"
 import type { AvailableCategory } from "./dynamic-agent-prompt-builder"
 import { fetchAvailableModels, readConnectedProvidersCache } from "../shared"
 import { DEFAULT_CATEGORIES, CATEGORY_DESCRIPTIONS } from "../tools/delegate-task/constants"
@@ -36,6 +37,7 @@ const agentSources: Record<BuiltinAgentName, AgentSource> = {
   // Note: Atlas is handled specially in createBuiltinAgents()
   // because it needs OrchestratorContext, not just a model string
   atlas: createAtlasAgent as AgentFactory,
+  "git-owner": createGitOwnerAgent,
 }
 
 /**
@@ -50,6 +52,7 @@ const agentMetadata: Partial<Record<BuiltinAgentName, AgentPromptMetadata>> = {
   metis: metisPromptMetadata,
   momus: momusPromptMetadata,
   atlas: atlasPromptMetadata,
+  "git-owner": GIT_OWNER_PROMPT_METADATA,
 }
 
 export async function createBuiltinAgents(

@@ -80,6 +80,7 @@ export type BuiltinAgentName =
   | "metis"
   | "momus"
   | "atlas"
+  | "git-owner"
 
 export type OverridableAgentName =
   | "build"
