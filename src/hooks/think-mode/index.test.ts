@@ -48,9 +48,9 @@ describe("createThinkModeHook integration", () => {
         // when the chat.params hook is called
         await hook["chat.params"](input, sessionID)
 
-        // then should upgrade to high variant and inject thinking config
+        // then should keep model ID and inject thinking config
         const message = input.message as MessageWithInjectedProps
-        expect(input.message.model?.modelID).toBe("claude-opus-4-5-high")
+        expect(input.message.model?.modelID).toBe("claude-opus-4-5")
         expect(message.thinking).toBeDefined()
         expect((message.thinking as Record<string, unknown>)?.type).toBe(
           "enabled"
@@ -72,9 +72,9 @@ describe("createThinkModeHook integration", () => {
         // when the chat.params hook is called
         await hook["chat.params"](input, sessionID)
 
-        // then should upgrade to high variant (hyphen format)
+        // then should keep model ID (dots preserved) and inject thinking config
         const message = input.message as MessageWithInjectedProps
-        expect(input.message.model?.modelID).toBe("claude-opus-4-5-high")
+        expect(input.message.model?.modelID).toBe("claude-opus-4.5")
         expect(message.thinking).toBeDefined()
       })
 
@@ -90,9 +90,9 @@ describe("createThinkModeHook integration", () => {
         // when the chat.params hook is called
         await hook["chat.params"](input, sessionID)
 
-        // then should upgrade to high variant
+        // then should keep model ID and inject thinking config
         const message = input.message as MessageWithInjectedProps
-        expect(input.message.model?.modelID).toBe("claude-sonnet-4-5-high")
+        expect(input.message.model?.modelID).toBe("claude-sonnet-4-5")
         expect(message.thinking).toBeDefined()
       })
     })
@@ -110,9 +110,9 @@ describe("createThinkModeHook integration", () => {
         // when the chat.params hook is called
         await hook["chat.params"](input, sessionID)
 
-        // then should upgrade to high variant and inject google thinking config
+        // then should keep model ID and inject google thinking config
         const message = input.message as MessageWithInjectedProps
-        expect(input.message.model?.modelID).toBe("gemini-3-pro-high")
+        expect(input.message.model?.modelID).toBe("gemini-3-pro")
         expect(message.providerOptions).toBeDefined()
         const googleOptions = (
           message.providerOptions as Record<string, unknown>
@@ -132,9 +132,9 @@ describe("createThinkModeHook integration", () => {
         // when the chat.params hook is called
         await hook["chat.params"](input, sessionID)
 
-        // then should upgrade to high variant
+        // then should keep model ID and inject google thinking config
         const message = input.message as MessageWithInjectedProps
-        expect(input.message.model?.modelID).toBe("gemini-3-flash-high")
+        expect(input.message.model?.modelID).toBe("gemini-3-flash")
         expect(message.providerOptions).toBeDefined()
       })
     })
@@ -152,9 +152,9 @@ describe("createThinkModeHook integration", () => {
         // when the chat.params hook is called
         await hook["chat.params"](input, sessionID)
 
-        // then should upgrade to high variant and inject openai thinking config
+        // then should keep model ID and inject openai thinking config
         const message = input.message as MessageWithInjectedProps
-        expect(input.message.model?.modelID).toBe("gpt-5-2-high")
+        expect(input.message.model?.modelID).toBe("gpt-5.2")
         expect(message.reasoning_effort).toBe("high")
       })
 
@@ -166,9 +166,9 @@ describe("createThinkModeHook integration", () => {
         // when the chat.params hook is called
         await hook["chat.params"](input, sessionID)
 
-        // then should upgrade to high variant
+        // then should keep model ID and inject openai thinking config
         const message = input.message as MessageWithInjectedProps
-        expect(input.message.model?.modelID).toBe("gpt-5-high")
+        expect(input.message.model?.modelID).toBe("gpt-5")
         expect(message.reasoning_effort).toBe("high")
       })
     })
@@ -208,9 +208,9 @@ describe("createThinkModeHook integration", () => {
       // when the chat.params hook is called
       await hook["chat.params"](input, sessionID)
 
-      // then should work as before
+      // then should inject thinking config without switching the model ID
       const message = input.message as MessageWithInjectedProps
-      expect(input.message.model?.modelID).toBe("claude-sonnet-4-5-high")
+      expect(input.message.model?.modelID).toBe("claude-sonnet-4-5")
       expect(message.thinking).toBeDefined()
     })
 
@@ -226,9 +226,9 @@ describe("createThinkModeHook integration", () => {
       // when the chat.params hook is called
       await hook["chat.params"](input, sessionID)
 
-      // then should work as before
+      // then should inject google thinking config without switching the model ID
       const message = input.message as MessageWithInjectedProps
-      expect(input.message.model?.modelID).toBe("gemini-3-pro-high")
+      expect(input.message.model?.modelID).toBe("gemini-3-pro")
       expect(message.providerOptions).toBeDefined()
     })
 
@@ -240,9 +240,9 @@ describe("createThinkModeHook integration", () => {
       // when the chat.params hook is called
       await hook["chat.params"](input, sessionID)
 
-      // then should work
+      // then should inject openai thinking config without switching the model ID
       const message = input.message as MessageWithInjectedProps
-      expect(input.message.model?.modelID).toBe("gpt-5-high")
+      expect(input.message.model?.modelID).toBe("gpt-5")
       expect(message.reasoning_effort).toBe("high")
     })
 
@@ -258,9 +258,9 @@ describe("createThinkModeHook integration", () => {
       // when the chat.params hook is called
       await hook["chat.params"](input, sessionID)
 
-      // then should inject bedrock thinking config
+      // then should inject bedrock thinking config without switching the model ID
       const message = input.message as MessageWithInjectedProps
-      expect(input.message.model?.modelID).toBe("claude-sonnet-4-5-high")
+      expect(input.message.model?.modelID).toBe("claude-sonnet-4-5")
       expect(message.reasoningConfig).toBeDefined()
     })
   })

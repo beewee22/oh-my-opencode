@@ -1,5 +1,5 @@
 import { detectThinkKeyword, extractPromptText } from "./detector"
-import { getHighVariant, isAlreadyHighVariant, getThinkingConfig } from "./switcher"
+import { isAlreadyHighVariant, getThinkingConfig } from "./switcher"
 import type { ThinkModeState, ThinkModeInput } from "./types"
 import { log } from "../../shared"
 
@@ -48,21 +48,13 @@ export function createThinkModeHook() {
         return
       }
 
-      const highVariant = getHighVariant(currentModel.modelID)
       const thinkingConfig = getThinkingConfig(currentModel.providerID, currentModel.modelID)
 
-      if (highVariant) {
-        output.message.model = {
-          providerID: currentModel.providerID,
-          modelID: highVariant,
-        }
-        state.modelSwitched = true
-        log("Think mode: model switched to high variant", {
-          sessionID,
-          from: currentModel.modelID,
-          to: highVariant,
-        })
-      }
+      // NOTE: We intentionally do NOT switch model IDs here.
+      // The "-high" model IDs are an internal convention that is not guaranteed
+      // to exist in provider model catalogs (Anthropic, Bedrock, OpenAI, etc.).
+      // Think mode should be implemented via provider options (thinking/reasoning config)
+      // to avoid "invalid model identifier" errors.
 
       if (thinkingConfig) {
         const messageData = output.message as Record<string, unknown>
