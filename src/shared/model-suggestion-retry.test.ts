@@ -1,6 +1,7 @@
-import { describe, it, expect, mock } from "bun:test"
+import { describe, it, expect, mock, beforeEach } from "bun:test"
 import type { PromptClient } from "./model-suggestion-retry"
 import { parseModelSuggestion, promptWithModelSuggestionRetry } from "./model-suggestion-retry"
+import { markProviderRateLimited, __resetRateLimitCache } from "./rate-limit-cache"
 
 function createClient(promptMock: ReturnType<typeof mock>): PromptClient {
   const prompt: PromptClient["session"]["prompt"] = ((
@@ -251,6 +252,10 @@ describe("parseModelSuggestion", () => {
 })
 
 describe("promptWithModelSuggestionRetry", () => {
+  beforeEach(() => {
+    __resetRateLimitCache()
+  })
+
   it("should succeed on first try without retry", async () => {
     // given a client where prompt succeeds
     const promptMock = mock(() => Promise.resolve())
@@ -519,5 +524,94 @@ describe("promptWithModelSuggestionRetry", () => {
     ).rejects.toThrow()
 
     expect(promptMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("should skip Anthropic and go directly to Bedrock when provider is cached as rate-limited", async () => {
+    //#given - anthropic is already cached as rate-limited
+    markProviderRateLimited("anthropic")
+    const promptMock = mock().mockResolvedValueOnce(undefined)
+    const client = createClient(promptMock)
+
+    //#when - promptWithModelSuggestionRetry is called with anthropic model
+    await promptWithModelSuggestionRetry(client, {
+      path: { id: "session-1" },
+      body: {
+        agent: "sisyphus",
+        parts: [{ type: "text", text: "hello" }],
+        model: { providerID: "anthropic", modelID: "claude-opus-4-6" },
+        noReply: true,
+      },
+    })
+
+    //#then - should call prompt ONCE with bedrock (never tried anthropic)
+    expect(promptMock).toHaveBeenCalledTimes(1)
+    const callArg = promptMock.mock.calls[0]?.[0] as unknown
+    const body = getCallBody(callArg)
+    expect(body.model).toEqual({
+      providerID: "amazon-bedrock",
+      modelID: "claude-opus-4-6",
+    })
+  })
+
+  it("should cache Anthropic as rate-limited after first quota error", async () => {
+    //#given - fresh cache, first call hits quota error, second call succeeds via bedrock
+    const promptMock = mock()
+      .mockRejectedValueOnce({ status: 429, message: "insufficient_quota" })
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+    const client = createClient(promptMock)
+
+    //#when - first call triggers quota error → caches + retries with bedrock
+    await promptWithModelSuggestionRetry(client, {
+      path: { id: "session-1" },
+      body: {
+        parts: [{ type: "text", text: "hello" }],
+        model: { providerID: "anthropic", modelID: "claude-opus-4-6" },
+      },
+    })
+
+    // second call should skip anthropic entirely
+    await promptWithModelSuggestionRetry(client, {
+      path: { id: "session-2" },
+      body: {
+        parts: [{ type: "text", text: "world" }],
+        model: { providerID: "anthropic", modelID: "claude-opus-4-6" },
+      },
+    })
+
+    //#then - 3 calls total: 1st=anthropic(fail), 2nd=bedrock(success), 3rd=bedrock(cached skip)
+    expect(promptMock).toHaveBeenCalledTimes(3)
+    // Third call should be bedrock (cached)
+    const thirdCallArg = promptMock.mock.calls[2]?.[0] as unknown
+    const thirdBody = getCallBody(thirdCallArg)
+    expect(thirdBody.model).toEqual({
+      providerID: "amazon-bedrock",
+      modelID: "claude-opus-4-6",
+    })
+  })
+
+  it("should not skip non-Anthropic provider even when Anthropic is cached", async () => {
+    //#given - anthropic is cached as rate-limited
+    markProviderRateLimited("anthropic")
+    const promptMock = mock().mockResolvedValueOnce(undefined)
+    const client = createClient(promptMock)
+
+    //#when - calling with openai provider (not anthropic)
+    await promptWithModelSuggestionRetry(client, {
+      path: { id: "session-1" },
+      body: {
+        parts: [{ type: "text", text: "hello" }],
+        model: { providerID: "openai", modelID: "gpt-5.2" },
+      },
+    })
+
+    //#then - should call openai normally (cache only affects anthropic)
+    expect(promptMock).toHaveBeenCalledTimes(1)
+    const callArg = promptMock.mock.calls[0]?.[0] as unknown
+    const body = getCallBody(callArg)
+    expect(body.model).toEqual({
+      providerID: "openai",
+      modelID: "gpt-5.2",
+    })
   })
 })

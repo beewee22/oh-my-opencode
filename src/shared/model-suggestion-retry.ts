@@ -1,6 +1,7 @@
 import type { createOpencodeClient } from "@opencode-ai/sdk"
 import { log } from "./logger"
 import { fuzzyMatchModel } from "./model-availability"
+import { isProviderRateLimited, markProviderRateLimited } from "./rate-limit-cache"
 
 type OpencodeClient = ReturnType<typeof createOpencodeClient>
 type PromptFn = OpencodeClient["session"]["prompt"]
@@ -182,6 +183,33 @@ export async function promptWithModelSuggestionRetry(
 
   const originalBody = args.body
 
+  const model = args.body.model
+  if (model && model.providerID === "anthropic" && model.modelID.toLowerCase().includes("claude") && isProviderRateLimited("anthropic")) {
+    const availableModels = await listAvailableModelsFromClient(client)
+    const preferredTarget = `amazon-bedrock/${model.modelID}`
+    const preferredMatch = fuzzyMatchModel(preferredTarget, availableModels, ["amazon-bedrock"])
+    if (preferredMatch) {
+      const bedrockModelID = getModelIdFromFullModel(preferredMatch)
+      log("[model-suggestion-retry] Anthropic cached as rate-limited, skipping to amazon-bedrock", {
+        original: `${model.providerID}/${model.modelID}`,
+        fallback: `amazon-bedrock/${bedrockModelID}`,
+      })
+      await client.session.prompt({
+        ...args,
+        body: {
+          ...args.body,
+          parts: args.body.parts,
+          model: {
+            providerID: "amazon-bedrock",
+            modelID: bedrockModelID,
+          },
+        },
+      })
+      return
+    }
+    log("[model-suggestion-retry] Anthropic cached as rate-limited but no bedrock alias found, trying anyway")
+  }
+
   try {
     await client.session.prompt(args)
   } catch (error) {
@@ -195,6 +223,7 @@ export async function promptWithModelSuggestionRetry(
         model.modelID.toLowerCase().includes("claude") &&
         isAnthropicQuotaExhausted(error)
       ) {
+        markProviderRateLimited("anthropic")
         const availableModels = await listAvailableModelsFromClient(client)
 
         // Safety: only fallback if we can find an amazon-bedrock model that matches
