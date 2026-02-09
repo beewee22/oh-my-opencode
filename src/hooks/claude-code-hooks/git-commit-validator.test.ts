@@ -692,4 +692,347 @@ describe("validateGitCommit", () => {
       expect(result.blocked).toBe(false)
     })
   })
+
+  describe("Expanded Forbidden Files", () => {
+    test("should block commit with tmp/ directory files", () => {
+      //#given a commit with tmp/ files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git commit -m 'feat: add cache'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git remote get-url origin")) {
+          return "https://github.com/personal/repo.git"
+        }
+        if (cmd.includes("git diff --staged --name-only")) {
+          return "tmp/cache.txt\nsrc/config.ts"
+        }
+        if (cmd.includes("git diff --staged")) {
+          return "+  const x = 1"
+        }
+        return ""
+      }
+
+      //#when checkForbiddenFiles validates staged files
+      const result = validateGitCommit(context, config, mockExecutor)
+
+      //#then it blocks the commit
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain("tmp")
+    })
+
+    test("should block commit with .tfplan files", () => {
+      //#given a commit with .tfplan files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git commit -m 'feat: add terraform'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git remote get-url origin")) {
+          return "https://github.com/personal/repo.git"
+        }
+        if (cmd.includes("git diff --staged --name-only")) {
+          return "terraform.tfplan"
+        }
+        if (cmd.includes("git diff --staged")) {
+          return "+  const x = 1"
+        }
+        return ""
+      }
+
+      //#when checkForbiddenFiles validates
+      const result = validateGitCommit(context, config, mockExecutor)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".tfplan")
+    })
+
+    test("should block commit with .tfstate files", () => {
+      //#given a commit with .tfstate files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git commit -m 'feat: add terraform'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git remote get-url origin")) {
+          return "https://github.com/personal/repo.git"
+        }
+        if (cmd.includes("git diff --staged --name-only")) {
+          return "terraform.tfstate"
+        }
+        if (cmd.includes("git diff --staged")) {
+          return "+  const x = 1"
+        }
+        return ""
+      }
+
+      //#when checkForbiddenFiles validates
+      const result = validateGitCommit(context, config, mockExecutor)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".tfstate")
+    })
+
+    test("should block commit with .tfstate.backup files", () => {
+      //#given a commit with .tfstate.backup files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git commit -m 'feat: add terraform'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git remote get-url origin")) {
+          return "https://github.com/personal/repo.git"
+        }
+        if (cmd.includes("git diff --staged --name-only")) {
+          return "terraform.tfstate.backup"
+        }
+        if (cmd.includes("git diff --staged")) {
+          return "+  const x = 1"
+        }
+        return ""
+      }
+
+      //#when checkForbiddenFiles validates
+      const result = validateGitCommit(context, config, mockExecutor)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".tfstate.backup")
+    })
+
+    test("should block commit with .terraform/ directory files", () => {
+      //#given a commit with .terraform/ files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git commit -m 'feat: add terraform'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git remote get-url origin")) {
+          return "https://github.com/personal/repo.git"
+        }
+        if (cmd.includes("git diff --staged --name-only")) {
+          return ".terraform/providers/registry.terraform.io/hashicorp/aws/5.0.0/linux_amd64/terraform-provider-aws_v5.0.0"
+        }
+        if (cmd.includes("git diff --staged")) {
+          return "+  const x = 1"
+        }
+        return ""
+      }
+
+      //#when checkForbiddenFiles validates
+      const result = validateGitCommit(context, config, mockExecutor)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".terraform")
+    })
+
+    test("should block commit with node_modules/ directory files", () => {
+      //#given a commit with node_modules/ files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git commit -m 'feat: add dependency'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git remote get-url origin")) {
+          return "https://github.com/personal/repo.git"
+        }
+        if (cmd.includes("git diff --staged --name-only")) {
+          return "node_modules/express/index.js"
+        }
+        if (cmd.includes("git diff --staged")) {
+          return "+  const x = 1"
+        }
+        return ""
+      }
+
+      //#when checkForbiddenFiles validates
+      const result = validateGitCommit(context, config, mockExecutor)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain("node_modules")
+    })
+
+    test("should block commit with __pycache__/ directory files", () => {
+      //#given a commit with __pycache__/ files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git commit -m 'feat: add python code'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git remote get-url origin")) {
+          return "https://github.com/personal/repo.git"
+        }
+        if (cmd.includes("git diff --staged --name-only")) {
+          return "__pycache__/module.cpython-39.pyc"
+        }
+        if (cmd.includes("git diff --staged")) {
+          return "+  const x = 1"
+        }
+        return ""
+      }
+
+      //#when checkForbiddenFiles validates
+      const result = validateGitCommit(context, config, mockExecutor)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain("__pycache__")
+    })
+
+    test("should block commit with .log files", () => {
+      //#given a commit with .log files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git commit -m 'feat: add logs'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git remote get-url origin")) {
+          return "https://github.com/personal/repo.git"
+        }
+        if (cmd.includes("git diff --staged --name-only")) {
+          return "debug.log"
+        }
+        if (cmd.includes("git diff --staged")) {
+          return "+  const x = 1"
+        }
+        return ""
+      }
+
+      //#when checkForbiddenFiles validates
+      const result = validateGitCommit(context, config, mockExecutor)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".log")
+    })
+
+    test("should block commit with .swp files", () => {
+      //#given a commit with .swp files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git commit -m 'feat: add code'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git remote get-url origin")) {
+          return "https://github.com/personal/repo.git"
+        }
+        if (cmd.includes("git diff --staged --name-only")) {
+          return ".main.cpp.swp"
+        }
+        if (cmd.includes("git diff --staged")) {
+          return "+  const x = 1"
+        }
+        return ""
+      }
+
+      //#when checkForbiddenFiles validates
+      const result = validateGitCommit(context, config, mockExecutor)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".swp")
+    })
+
+    test("should block commit with .swo files", () => {
+      //#given a commit with .swo files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git commit -m 'feat: add code'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git remote get-url origin")) {
+          return "https://github.com/personal/repo.git"
+        }
+        if (cmd.includes("git diff --staged --name-only")) {
+          return ".main.cpp.swo"
+        }
+        if (cmd.includes("git diff --staged")) {
+          return "+  const x = 1"
+        }
+        return ""
+      }
+
+      //#when checkForbiddenFiles validates
+      const result = validateGitCommit(context, config, mockExecutor)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".swo")
+    })
+
+    test("should block commit with .pyc files", () => {
+      //#given a commit with .pyc files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git commit -m 'feat: add python code'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git remote get-url origin")) {
+          return "https://github.com/personal/repo.git"
+        }
+        if (cmd.includes("git diff --staged --name-only")) {
+          return "module.pyc"
+        }
+        if (cmd.includes("git diff --staged")) {
+          return "+  const x = 1"
+        }
+        return ""
+      }
+
+      //#when checkForbiddenFiles validates
+      const result = validateGitCommit(context, config, mockExecutor)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".pyc")
+    })
+  })
 })

@@ -9,6 +9,33 @@ export interface GitCommitValidationResult {
 
 export type CommandExecutor = (cmd: string, cwd: string) => string
 
+export const FORBIDDEN_FILE_PATTERNS = [
+  /\.env$/,
+  /\.env\./,
+  /\.pem$/,
+  /\.key$/,
+  /\.p12$/,
+  /\.pfx$/,
+  /credentials\.json$/,
+  /serviceAccountKey\.json$/,
+  /\.DS_Store$/,
+  /\.secret$/,
+  /id_rsa$/,
+  /id_dsa$/,
+  /id_ed25519$/,
+  /(?:^|\/)tmp\//,
+  /\.tfplan$/,
+  /\.tfstate$/,
+  /\.tfstate\.backup$/,
+  /(?:^|\/)\.terraform\//,
+  /(?:^|\/)node_modules\//,
+  /(?:^|\/)__pycache__\//,
+  /\.log$/,
+  /\.swp$/,
+  /\.swo$/,
+  /\.pyc$/,
+]
+
 const defaultExecutor: CommandExecutor = (cmd: string, cwd: string): string => {
   try {
     return execSync(cmd, {
@@ -223,27 +250,10 @@ function checkForbiddenFiles(exec: CommandExecutor, cwd: string): GitCommitValid
     return null // No files or error (fail-open)
   }
 
-  // Forbidden file patterns (hardcoded list from requirements)
-  const forbiddenPatterns = [
-    /\.env$/,
-    /\.env\./,
-    /\.pem$/,
-    /\.key$/,
-    /\.p12$/,
-    /\.pfx$/,
-    /credentials\.json$/,
-    /serviceAccountKey\.json$/,
-    /\.DS_Store$/,
-    /\.secret$/,
-    /id_rsa$/,
-    /id_dsa$/,
-    /id_ed25519$/,
-  ]
-
   const fileList = files.split("\n").filter((f) => f.trim())
 
   for (const file of fileList) {
-    for (const pattern of forbiddenPatterns) {
+    for (const pattern of FORBIDDEN_FILE_PATTERNS) {
       if (pattern.test(file)) {
         return {
           blocked: true,
