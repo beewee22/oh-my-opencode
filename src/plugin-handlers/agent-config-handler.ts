@@ -58,6 +58,7 @@ export async function applyAgentConfig(params: {
     params.pluginConfig.browser_automation_engine?.provider ?? "playwright";
   const currentModel = params.config.model as string | undefined;
   const disabledSkills = new Set<string>(params.pluginConfig.disabled_skills ?? []);
+  const domainRestrictions = params.pluginConfig.domain_restrictions;
 
   const builtinAgents = await createBuiltinAgents(
     migratedDisabledAgents,
@@ -71,6 +72,7 @@ export async function applyAgentConfig(params: {
     browserProvider,
     currentModel,
     disabledSkills,
+    domainRestrictions,
   );
 
   const includeClaudeAgents = params.pluginConfig.claude_code?.agents ?? true;

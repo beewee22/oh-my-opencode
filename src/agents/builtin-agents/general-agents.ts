@@ -1,7 +1,7 @@
 import type { AgentConfig } from "@opencode-ai/sdk"
 import type { BuiltinAgentName, AgentOverrides, AgentPromptMetadata } from "../types"
 import type { CategoryConfig, GitMasterConfig } from "../../config/schema"
-import type { BrowserAutomationProvider } from "../../config/schema"
+import type { BrowserAutomationProvider, DomainRestriction } from "../../config/schema"
 import type { AvailableAgent } from "../dynamic-agent-prompt-builder"
 import { AGENT_MODEL_REQUIREMENTS, isModelAvailable } from "../../shared"
 import { buildAgent, isFactory } from "../agent-builder"
@@ -22,6 +22,7 @@ export function collectPendingBuiltinAgents(input: {
   uiSelectedModel?: string
   availableModels: Set<string>
   disabledSkills?: Set<string>
+  domainRestrictions?: DomainRestriction[]
 }): { pendingAgentConfigs: Map<string, AgentConfig>; availableAgents: AvailableAgent[] } {
   const {
     agentSources,
@@ -36,6 +37,7 @@ export function collectPendingBuiltinAgents(input: {
     uiSelectedModel,
     availableModels,
     disabledSkills,
+    domainRestrictions,
   } = input
 
   const availableAgents: AvailableAgent[] = []
@@ -72,7 +74,7 @@ export function collectPendingBuiltinAgents(input: {
     if (!resolution) continue
     const { model, variant: resolvedVariant } = resolution
 
-    let config = buildAgent(source, model, mergedCategories, gitMasterConfig, browserProvider, disabledSkills)
+    let config = buildAgent(source, model, mergedCategories, gitMasterConfig, browserProvider, disabledSkills, domainRestrictions)
 
     // Apply resolved variant from model fallback chain
     if (resolvedVariant) {
