@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test"
-import { validateGitCommit, type CommandExecutor } from "./git-commit-validator"
+import { validateGitCommit, validateGitAdd, type CommandExecutor } from "./git-commit-validator"
 import type { PreToolUseContext } from "./pre-tool-use"
 import type { OhMyOpenCodeConfig } from "../../config/schema"
 
@@ -1033,6 +1033,209 @@ describe("validateGitCommit", () => {
       //#then it blocks
       expect(result.blocked).toBe(true)
       expect(result.reason).toContain(".pyc")
+    })
+  })
+
+  describe("validateGitAdd", () => {
+    test("should block git add with forbidden .env file", () => {
+      //#given a git add command with forbidden .env file
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git add .env" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+
+      //#when validateGitAdd is called for git-owner agent
+      const result = validateGitAdd(context, config)
+
+      //#then it blocks the staging
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".env")
+    })
+
+    test("should allow git add with safe file", () => {
+      //#given a git add command with safe file
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git add src/app.ts" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+
+      //#when validateGitAdd is called
+      const result = validateGitAdd(context, config)
+
+      //#then it allows the staging
+      expect(result.blocked).toBe(false)
+    })
+
+    test("should block git add . with forbidden file in ls-files output", () => {
+      //#given a git add . command where ls-files returns forbidden file
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git add ." },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git ls-files")) {
+          return ".env\nsrc/app.ts"
+        }
+        return ""
+      }
+
+      //#when validateGitAdd is called
+      const result = validateGitAdd(context, config, mockExecutor)
+
+      //#then it blocks with forbidden file name in reason
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".env")
+    })
+
+    test("should block git add -A with forbidden file", () => {
+      //#given a git add -A command where ls-files returns forbidden file
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git add -A" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        if (cmd.includes("git ls-files")) {
+          return "terraform.tfstate\nsrc/config.ts"
+        }
+        return ""
+      }
+
+      //#when validateGitAdd is called
+      const result = validateGitAdd(context, config, mockExecutor)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".tfstate")
+    })
+
+    test("should block git add with mixed safe and forbidden files", () => {
+      //#given a git add with mixed safe and forbidden files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git add file1.ts file2.tfstate" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+
+      //#when validateGitAdd is called
+      const result = validateGitAdd(context, config)
+
+      //#then it blocks and reports the forbidden file
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".tfstate")
+    })
+
+    test("should block chained command with git add of forbidden files", () => {
+      //#given a chained command with git add of forbidden files
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git add .env && git commit -m 'msg'" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+
+      //#when validateGitAdd is called
+      const result = validateGitAdd(context, config)
+
+      //#then it blocks the chained command
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".env")
+    })
+
+    test("should skip validation for non-git-owner agent", () => {
+      //#given a git add command from non-git-owner agent
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git add .env" },
+        cwd: "/test",
+        agent: "sisyphus",
+      }
+      const config = {} as OhMyOpenCodeConfig
+
+      //#when validateGitAdd is called
+      const result = validateGitAdd(context, config)
+
+      //#then it returns not blocked (skip)
+      expect(result.blocked).toBe(false)
+    })
+
+    test("should allow when ls-files subprocess fails (fail-open)", () => {
+      //#given a git add . command where ls-files subprocess fails
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git add ." },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+      const mockExecutor: CommandExecutor = (cmd: string) => {
+        throw new Error("subprocess failed")
+      }
+
+      //#when validateGitAdd is called
+      const result = validateGitAdd(context, config, mockExecutor)
+
+      //#then it allows (fail-open)
+      expect(result.blocked).toBe(false)
+    })
+
+    test("should allow git add -p (interactive staging)", () => {
+      //#given a git add -p command (interactive staging)
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: "git add -p" },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+
+      //#when validateGitAdd is called
+      const result = validateGitAdd(context, config)
+
+      //#then it allows (fail-open, can't determine files)
+      expect(result.blocked).toBe(false)
+    })
+
+    test("should block git add with quoted path containing forbidden file", () => {
+      //#given a git add with quoted path containing forbidden file
+      const context: PreToolUseContext = {
+        sessionId: "test-session",
+        toolName: "bash",
+        toolInput: { command: 'git add "config/.env"' },
+        cwd: "/test",
+        agent: "git-owner",
+      }
+      const config = {} as OhMyOpenCodeConfig
+
+      //#when validateGitAdd is called
+      const result = validateGitAdd(context, config)
+
+      //#then it blocks
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain(".env")
     })
   })
 })

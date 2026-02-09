@@ -148,6 +148,92 @@ function isGitCommit(command: string): boolean {
   return false
 }
 
+export function isGitAdd(command: string): boolean {
+  const parts = command.split(/[;&|]+/)
+
+  for (const part of parts) {
+    const trimmed = part.trim()
+    if (/\bgit\s+add\b/.test(trimmed)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+export function extractGitAddFiles(
+  command: string,
+  exec: CommandExecutor,
+  cwd: string
+): string[] | null {
+  const parts = command.split(/[;&|]+/)
+  let gitAddCommand = ""
+
+  for (const part of parts) {
+    const trimmed = part.trim()
+    if (/\bgit\s+add\b/.test(trimmed)) {
+      gitAddCommand = trimmed
+      break
+    }
+  }
+
+  if (!gitAddCommand) {
+    return null
+  }
+
+  if (/\bgit\s+add\s+(-p|--patch)\b/.test(gitAddCommand)) {
+    return null
+  }
+
+  const args = gitAddCommand
+    .replace(/\bgit\s+add\s+/, "")
+    .split(/\s+/)
+    .filter((arg) => arg)
+
+  const skipFlags = new Set([
+    "-f",
+    "--force",
+    "-n",
+    "--dry-run",
+    "--intent-to-add",
+    "-v",
+    "--verbose",
+    "-e",
+    "--edit",
+  ])
+
+  const files: string[] = []
+  let needsLsFiles = false
+
+  for (const arg of args) {
+    if (skipFlags.has(arg)) {
+      continue
+    }
+
+    if (arg === "." || arg === "-A" || arg === "--all" || arg === "-u" || arg === "--update") {
+      needsLsFiles = true
+      break
+    }
+
+    const unquoted = arg.replace(/^['"]|['"]$/g, "")
+    files.push(unquoted)
+  }
+
+  if (needsLsFiles) {
+    try {
+      const output = exec("git ls-files --others --modified --exclude-standard", cwd)
+      return output
+        .split("\n")
+        .map((f) => f.trim())
+        .filter((f) => f)
+    } catch {
+      return null
+    }
+  }
+
+  return files.length > 0 ? files : null
+}
+
 function extractCommitMessage(command: string): string | null {
   // Extract message from -m "..." or --message="..." or --message "..."
   // Handle multiple -m flags (concatenate with newlines)
@@ -293,4 +379,44 @@ function hasKoreanChars(subject: string): boolean {
 
 function hasCoAuthoredBy(fullMessage: string): boolean {
   return /Co-authored-by:/i.test(fullMessage)
+}
+
+export function validateGitAdd(
+  context: PreToolUseContext,
+  config: OhMyOpenCodeConfig,
+  executor?: CommandExecutor
+): GitCommitValidationResult {
+  if (context.agent !== "git-owner") {
+    return { blocked: false }
+  }
+
+  const command = extractCommand(context)
+  if (!command) {
+    return { blocked: false }
+  }
+
+  if (!isGitAdd(command)) {
+    return { blocked: false }
+  }
+
+  const exec = executor ?? defaultExecutor
+  const cwd = (context.toolInput?.command_cwd as string | undefined) ?? context.cwd
+
+  const files = extractGitAddFiles(command, exec, cwd)
+  if (!files) {
+    return { blocked: false }
+  }
+
+  for (const file of files) {
+    for (const pattern of FORBIDDEN_FILE_PATTERNS) {
+      if (pattern.test(file)) {
+        return {
+          blocked: true,
+          reason: `Forbidden file in git add: ${file}. Avoid staging sensitive/unnecessary files (tmp/, .env, .tfstate, etc.)`,
+        }
+      }
+    }
+  }
+
+  return { blocked: false }
 }

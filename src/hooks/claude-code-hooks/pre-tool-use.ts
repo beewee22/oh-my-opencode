@@ -9,7 +9,7 @@ import { DEFAULT_CONFIG } from "./plugin-config"
 import { isHookCommandDisabled, type PluginExtendedConfig } from "./config-loader"
 import type { OhMyOpenCodeConfig } from "../../config/schema"
 import { enforceGitWriteRestriction } from "./git-write-enforcement"
-import { validateGitCommit } from "./git-commit-validator"
+import { validateGitCommit, validateGitAdd } from "./git-commit-validator"
 import { enforceKubectlWriteRestriction } from "./kubectl-write-enforcement"
 
 export interface PreToolUseContext {
@@ -75,6 +75,18 @@ export async function executePreToolUseHooks(
        reason: commitValidation.reason,
        elapsedMs: Date.now() - startTime,
        hookName: "git-commit-validator",
+       toolName: ctx.toolName,
+       inputLines: buildInputLines(ctx.toolInput),
+     }
+   }
+
+   const gitAddValidation = validateGitAdd(ctx, ohMyOpenCodeConfig)
+   if (gitAddValidation.blocked) {
+     return {
+       decision: "deny",
+       reason: gitAddValidation.reason,
+       elapsedMs: Date.now() - startTime,
+       hookName: "git-add-validator",
        toolName: ctx.toolName,
        inputLines: buildInputLines(ctx.toolInput),
      }
