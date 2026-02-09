@@ -40,7 +40,24 @@ export function enforceGitWriteRestriction(
 
   return {
     blocked: true,
-    reason: "Git write blocked. Delegate to git-owner agent for: commit, push, merge operations.",
+    reason: `Git write blocked. You cannot execute git write operations directly.
+
+REQUIRED: Delegate to git-owner agent using task():
+
+task(
+  subagent_type="git-owner",
+  load_skills=["git-master"],
+  prompt="Execute the git operation: [describe what you were trying to do]"
+)
+
+Example:
+task(
+  subagent_type="git-owner",
+  load_skills=["git-master"],
+  prompt="Commit changes with message: feat(xyz): add feature. Target branch: dev"
+)
+
+DO NOT attempt git write operations directly. ALL git write operations (commit, push, merge, rebase, etc.) MUST go through git-owner with git-master skill.`,
   }
 }
 

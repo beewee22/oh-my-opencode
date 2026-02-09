@@ -36,14 +36,48 @@ export function enforceKubectlWriteRestriction(
   if (classification.isDangerous && agent !== "k8s-owner") {
     return {
       blocked: true,
-      reason: "Kubectl dangerous operation blocked. Delegate to k8s-owner agent for: scale, delete, apply operations.",
+      reason: `Kubectl dangerous operation blocked. You cannot execute dangerous kubectl operations directly.
+
+REQUIRED: Delegate to k8s-owner agent using task():
+
+task(
+  subagent_type="k8s-owner",
+  load_skills=[],
+  prompt="Execute the kubectl operation: [describe what you were trying to do]"
+)
+
+Example:
+task(
+  subagent_type="k8s-owner",
+  load_skills=[],
+  prompt="Scale deployment xyz to 3 replicas. Check for KEDA/HPA conflicts first."
+)
+
+DO NOT attempt kubectl dangerous operations directly. ALL dangerous operations (scale, delete, apply, etc.) MUST go through k8s-owner.`,
     }
   }
 
   if (classification.isContextSwitch && agent !== "k8s-owner") {
     return {
       blocked: true,
-      reason: "Kubectl context switch blocked. Delegate to k8s-owner agent for: context switching operations.",
+      reason: `Kubectl context switch blocked. You cannot switch kubectl contexts directly.
+
+REQUIRED: Delegate to k8s-owner agent using task():
+
+task(
+  subagent_type="k8s-owner",
+  load_skills=[],
+  prompt="Switch kubectl context to: [cluster-name]"
+)
+
+Example:
+task(
+  subagent_type="k8s-owner",
+  load_skills=[],
+  prompt="Switch kubectl context to prd-mss-cluster. Show current context first."
+)
+
+DO NOT attempt context switching directly. ALL context switches MUST go through k8s-owner for safety.`,
     }
   }
 
