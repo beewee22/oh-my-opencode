@@ -2,8 +2,10 @@ import type { AgentConfig } from "@opencode-ai/sdk"
 import type { AgentFactory } from "./types"
 import type { CategoriesConfig, CategoryConfig, GitMasterConfig } from "../config/schema"
 import type { BrowserAutomationProvider } from "../config/schema"
+import type { DomainRestriction } from "../config/schema/custom-agents"
 import { DEFAULT_CATEGORIES } from "../tools/delegate-task/constants"
 import { resolveMultipleSkills } from "../features/opencode-skill-loader/skill-content"
+import { buildDomainRestrictionSection } from "./domain-restriction-prompt-builder"
 
 export type AgentSource = AgentFactory | AgentConfig
 
@@ -17,7 +19,8 @@ export function buildAgent(
   categories?: CategoriesConfig,
   gitMasterConfig?: GitMasterConfig,
   browserProvider?: BrowserAutomationProvider,
-  disabledSkills?: Set<string>
+  disabledSkills?: Set<string>,
+  domainRestrictions?: DomainRestriction[]
 ): AgentConfig {
   const base = isFactory(source) ? source(model) : { ...source }
   const categoryConfigs: Record<string, CategoryConfig> = categories
@@ -40,12 +43,23 @@ export function buildAgent(
     }
   }
 
+  let skillContent = ""
   if (agentWithCategory.skills?.length) {
     const { resolved } = resolveMultipleSkills(agentWithCategory.skills, { gitMasterConfig, browserProvider, disabledSkills })
     if (resolved.size > 0) {
-      const skillContent = Array.from(resolved.values()).join("\n\n")
-      base.prompt = skillContent + (base.prompt ? "\n\n" + base.prompt : "")
+      skillContent = Array.from(resolved.values()).join("\n\n")
     }
+  }
+
+  const domainRestrictionContent = buildDomainRestrictionSection(domainRestrictions)
+
+  const parts: string[] = []
+  if (skillContent) parts.push(skillContent)
+  if (domainRestrictionContent) parts.push(domainRestrictionContent)
+  if (base.prompt) parts.push(base.prompt)
+
+  if (parts.length > 0) {
+    base.prompt = parts.join("\n\n")
   }
 
   return base
