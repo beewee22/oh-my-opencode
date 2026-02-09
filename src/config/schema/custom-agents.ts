@@ -26,6 +26,12 @@ export const DomainRestrictionSchema = z.object({
   domain: z.string(),
   ownerAgent: z.string(),
   restrictedTools: z.array(z.string()),
+  description: z.string().optional(),
+  allowedReadOps: z.array(z.string()).optional(),
+  delegationTemplate: z.object({
+    subagentType: z.string(),
+    loadSkills: z.array(z.string()),
+  }).optional(),
 })
 
 export type CustomAgentMetadata = z.infer<typeof CustomAgentMetadataSchema>
