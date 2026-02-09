@@ -142,6 +142,7 @@ export async function createBuiltinAgents(
     mergedCategories,
     directory,
     userCategories: categories,
+    domainRestrictions,
   })
   if (sisyphusConfig) {
     result["sisyphus"] = sisyphusConfig

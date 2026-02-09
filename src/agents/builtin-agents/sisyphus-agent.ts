@@ -1,6 +1,6 @@
 import type { AgentConfig } from "@opencode-ai/sdk"
 import type { AgentOverrides } from "../types"
-import type { CategoriesConfig, CategoryConfig } from "../../config/schema"
+import type { CategoriesConfig, CategoryConfig, DomainRestriction } from "../../config/schema"
 import type { AvailableAgent, AvailableCategory, AvailableSkill } from "../dynamic-agent-prompt-builder"
 import { AGENT_MODEL_REQUIREMENTS, isAnyFallbackModelAvailable } from "../../shared"
 import { applyEnvironmentContext } from "./environment-context"
@@ -21,6 +21,7 @@ export function maybeCreateSisyphusConfig(input: {
   mergedCategories: Record<string, CategoryConfig>
   directory?: string
   userCategories?: CategoriesConfig
+  domainRestrictions?: DomainRestriction[]
 }): AgentConfig | undefined {
   const {
     disabledAgents,
@@ -34,6 +35,7 @@ export function maybeCreateSisyphusConfig(input: {
     availableCategories,
     mergedCategories,
     directory,
+    domainRestrictions,
   } = input
 
   const sisyphusOverride = agentOverrides["sisyphus"]
@@ -67,7 +69,9 @@ export function maybeCreateSisyphusConfig(input: {
     availableAgents,
     undefined,
     availableSkills,
-    availableCategories
+    availableCategories,
+    false,
+    domainRestrictions
   )
 
   if (sisyphusResolvedVariant) {

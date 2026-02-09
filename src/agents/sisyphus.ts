@@ -22,6 +22,8 @@ import {
   buildAntiPatternsSection,
   categorizeTools,
 } from "./dynamic-agent-prompt-builder"
+import type { DomainRestriction } from "../config/schema/custom-agents"
+import { buildDomainRestrictionSection } from "./domain-restriction-prompt-builder"
 
 function buildTaskManagementSection(useTaskSystem: boolean): string {
   if (useTaskSystem) {
@@ -146,7 +148,8 @@ function buildDynamicSisyphusPrompt(
   availableTools: AvailableTool[] = [],
   availableSkills: AvailableSkill[] = [],
   availableCategories: AvailableCategory[] = [],
-  useTaskSystem = false
+  useTaskSystem = false,
+  domainRestrictions?: DomainRestriction[]
 ): string {
   const keyTriggers = buildKeyTriggersSection(availableAgents, availableSkills)
   const toolSelection = buildToolSelectionTable(availableAgents, availableTools, availableSkills)
@@ -158,6 +161,7 @@ function buildDynamicSisyphusPrompt(
   const hardBlocks = buildHardBlocksSection()
   const antiPatterns = buildAntiPatternsSection()
   const taskManagementSection = buildTaskManagementSection(useTaskSystem)
+  const domainRestrictionSection = buildDomainRestrictionSection(domainRestrictions)
   const todoHookNote = useTaskSystem
     ? "YOUR TASK CREATION WOULD BE TRACKED BY HOOK([SYSTEM REMINDER - TASK CONTINUATION])"
     : "YOUR TODO CREATION WOULD BE TRACKED BY HOOK([SYSTEM REMINDER - TODO CONTINUATION])"
@@ -180,6 +184,7 @@ You are "Sisyphus" - Powerful AI Agent with orchestration capabilities from OhMy
 **Operating Mode**: You NEVER work alone when specialists are available. Frontend work → delegate. Deep research → parallel background agents (async subagents). Complex architecture → consult Oracle.
 
 </Role>
+${domainRestrictionSection ? `\n${domainRestrictionSection}\n` : ""}
 <Behavior_Instructions>
 
 ## Phase 0 - Intent Gate (EVERY message)
@@ -500,14 +505,15 @@ export function createSisyphusAgent(
   availableToolNames?: string[],
   availableSkills?: AvailableSkill[],
   availableCategories?: AvailableCategory[],
-  useTaskSystem = false
+  useTaskSystem = false,
+  domainRestrictions?: DomainRestriction[]
 ): AgentConfig {
   const tools = availableToolNames ? categorizeTools(availableToolNames) : []
   const skills = availableSkills ?? []
   const categories = availableCategories ?? []
   const prompt = availableAgents
-    ? buildDynamicSisyphusPrompt(availableAgents, tools, skills, categories, useTaskSystem)
-    : buildDynamicSisyphusPrompt([], tools, skills, categories, useTaskSystem)
+    ? buildDynamicSisyphusPrompt(availableAgents, tools, skills, categories, useTaskSystem, domainRestrictions)
+    : buildDynamicSisyphusPrompt([], tools, skills, categories, useTaskSystem, domainRestrictions)
 
   const permission = { question: "allow", call_omo_agent: "deny" } as AgentConfig["permission"]
   const base = {
