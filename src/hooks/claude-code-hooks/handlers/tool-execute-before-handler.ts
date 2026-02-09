@@ -9,6 +9,7 @@ import { appendTranscriptEntry } from "../transcript"
 import { cacheToolInput } from "../tool-input-cache"
 import type { PluginConfig } from "../types"
 import { isHookDisabled, log } from "../../../shared"
+import { getSessionAgent } from "../../../features/claude-code-session-state"
 
 export function createToolExecuteBeforeHandler(ctx: PluginInput, config: PluginConfig) {
 	return async (
@@ -59,13 +60,14 @@ export function createToolExecuteBeforeHandler(ctx: PluginInput, config: PluginC
 			return
 		}
 
-		const preCtx: PreToolUseContext = {
-			sessionId: input.sessionID,
-			toolName: input.tool,
-			toolInput: output.args,
-			cwd: ctx.directory,
-			toolUseId: input.callID,
-		}
+	const preCtx: PreToolUseContext = {
+		sessionId: input.sessionID,
+		toolName: input.tool,
+		toolInput: output.args,
+		cwd: ctx.directory,
+		toolUseId: input.callID,
+		agent: getSessionAgent(input.sessionID),
+	}
 
 		const result = await executePreToolUseHooks(preCtx, claudeConfig, extendedConfig)
 
