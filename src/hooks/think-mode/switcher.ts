@@ -109,6 +109,13 @@ const HIGH_VARIANT_MAP: Record<string, string> = {
   "gpt-5-2": "gpt-5-2-high",
   "gpt-5-2-chat-latest": "gpt-5-2-chat-latest-high",
   "gpt-5-2-pro": "gpt-5-2-pro-high",
+  // GPT-5.3
+  "gpt-5-3": "gpt-5-3-high",
+  "gpt-5-3-chat-latest": "gpt-5-3-chat-latest-high",
+  "gpt-5-3-pro": "gpt-5-3-pro-high",
+  "gpt-5-3-codex": "gpt-5-3-codex-high",
+  "gpt-5-3-codex-mini": "gpt-5-3-codex-mini-high",
+  "gpt-5-3-codex-max": "gpt-5-3-codex-max-high",
 }
 
 const ALREADY_HIGH: Set<string> = new Set(Object.values(HIGH_VARIANT_MAP))

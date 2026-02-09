@@ -29,6 +29,8 @@ function normalizeModelName(name: string): string {
 		.toLowerCase()
 		.replace(/claude-(opus|sonnet|haiku)-4-5/g, "claude-$1-4.5")
 		.replace(/claude-(opus|sonnet|haiku)-4\.5/g, "claude-$1-4.5")
+		.replace(/claude-(opus|sonnet|haiku)-4-6/g, "claude-$1-4.6")
+		.replace(/claude-(opus|sonnet|haiku)-4\.6/g, "claude-$1-4.6")
 }
 
 export function fuzzyMatchModel(
