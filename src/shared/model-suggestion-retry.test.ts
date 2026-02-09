@@ -30,6 +30,31 @@ function createClient(promptMock: ReturnType<typeof mock>): PromptClient {
   }
 }
 
+function createOpenAIClient(promptMock: ReturnType<typeof mock>): PromptClient {
+  const prompt: PromptClient["session"]["prompt"] = ((
+    args: Parameters<PromptClient["session"]["prompt"]>[0]
+  ) => {
+    return Promise.resolve(promptMock(args)) as unknown as ReturnType<
+      PromptClient["session"]["prompt"]
+    >
+  }) as unknown as PromptClient["session"]["prompt"]
+
+  return {
+    session: { prompt },
+    provider: {
+      list: async () => ({ data: { connected: ["openai", "openrouter"] } }),
+    },
+    model: {
+      list: async () => ({
+        data: [
+          { provider: "openai", id: "gpt-5.3-codex" },
+          { provider: "openrouter", id: "openai/gpt-5.3-codex" },
+        ],
+      }),
+    },
+  }
+}
+
 function getCallBody(callArg: unknown): Record<string, unknown> {
   if (!callArg || typeof callArg !== "object") {
     throw new Error("Expected call argument to be an object")
@@ -612,6 +637,145 @@ describe("promptWithModelSuggestionRetry", () => {
     expect(body.model).toEqual({
       providerID: "openai",
       modelID: "gpt-5.2",
+    })
+  })
+
+  it("should retry with openrouter when OpenAI quota is exhausted", async () => {
+    //#given - OpenAI returns rate limit error
+    const promptMock = mock()
+      .mockRejectedValueOnce({ status: 429, message: "Rate limit exceeded" })
+      .mockResolvedValueOnce(undefined)
+    const client = createOpenAIClient(promptMock)
+
+    //#when - calling with openai model
+    await promptWithModelSuggestionRetry(client, {
+      path: { id: "session-1" },
+      body: {
+        agent: "sisyphus",
+        parts: [{ type: "text", text: "hello" }],
+        model: { providerID: "openai", modelID: "gpt-5.3-codex" },
+        noReply: true,
+      },
+    })
+
+    //#then - should retry with openrouter
+    expect(promptMock).toHaveBeenCalledTimes(2)
+    const retryCallArg = promptMock.mock.calls[1]?.[0] as unknown
+    const retryBody = getCallBody(retryCallArg)
+    expect(retryBody.model).toEqual({
+      providerID: "openrouter",
+      modelID: "openai/gpt-5.3-codex",
+    })
+    expect(retryBody.noReply).toBe(true)
+  })
+
+  it("should not retry with openrouter when no openrouter model exists", async () => {
+    //#given - OpenAI rate limit but no openrouter models
+    const promptMock = mock().mockRejectedValueOnce({ status: 429, message: "rate_limit_exceeded" })
+    const client: PromptClient = {
+      ...createOpenAIClient(promptMock),
+      model: {
+        list: async () => ({
+          data: [
+            { provider: "openai", id: "gpt-5.3-codex" },
+            // No openrouter models
+          ],
+        }),
+      },
+    }
+
+    //#when / #then - should throw without retrying
+    await expect(
+      promptWithModelSuggestionRetry(client, {
+        path: { id: "session-1" },
+        body: {
+          parts: [{ type: "text", text: "hello" }],
+          model: { providerID: "openai", modelID: "gpt-5.3-codex" },
+        },
+      })
+    ).rejects.toThrow()
+
+    expect(promptMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("should not retry with openrouter when provider is not openai", async () => {
+    //#given - rate limit error but from anthropic provider (not openai)
+    const promptMock = mock().mockRejectedValueOnce({ status: 429, message: "Rate limit exceeded" })
+    const client = createOpenAIClient(promptMock)
+
+    //#when / #then - anthropic provider should not trigger openrouter retry
+    await expect(
+      promptWithModelSuggestionRetry(client, {
+        path: { id: "session-1" },
+        body: {
+          parts: [{ type: "text", text: "hello" }],
+          model: { providerID: "google", modelID: "gemini-3-flash" },
+        },
+      })
+    ).rejects.toThrow()
+
+    expect(promptMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("should skip OpenAI and go directly to OpenRouter when provider is cached as rate-limited", async () => {
+    //#given - openai is already cached as rate-limited
+    markProviderRateLimited("openai")
+    const promptMock = mock().mockResolvedValueOnce(undefined)
+    const client = createOpenAIClient(promptMock)
+
+    //#when - calling with openai model
+    await promptWithModelSuggestionRetry(client, {
+      path: { id: "session-1" },
+      body: {
+        agent: "sisyphus",
+        parts: [{ type: "text", text: "hello" }],
+        model: { providerID: "openai", modelID: "gpt-5.3-codex" },
+      },
+    })
+
+    //#then - should call prompt ONCE with openrouter (never tried openai)
+    expect(promptMock).toHaveBeenCalledTimes(1)
+    const callArg = promptMock.mock.calls[0]?.[0] as unknown
+    const body = getCallBody(callArg)
+    expect(body.model).toEqual({
+      providerID: "openrouter",
+      modelID: "openai/gpt-5.3-codex",
+    })
+  })
+
+  it("should cache OpenAI as rate-limited after first quota error", async () => {
+    //#given - fresh cache, first call hits rate limit
+    const promptMock = mock()
+      .mockRejectedValueOnce({ status: 429, message: "Rate limit exceeded" })
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+    const client = createOpenAIClient(promptMock)
+
+    //#when - first call triggers rate limit → caches + retries with openrouter
+    await promptWithModelSuggestionRetry(client, {
+      path: { id: "session-1" },
+      body: {
+        parts: [{ type: "text", text: "hello" }],
+        model: { providerID: "openai", modelID: "gpt-5.3-codex" },
+      },
+    })
+
+    // second call should skip openai entirely
+    await promptWithModelSuggestionRetry(client, {
+      path: { id: "session-2" },
+      body: {
+        parts: [{ type: "text", text: "world" }],
+        model: { providerID: "openai", modelID: "gpt-5.3-codex" },
+      },
+    })
+
+    //#then - 3 calls total: 1st=openai(fail), 2nd=openrouter(success), 3rd=openrouter(cached skip)
+    expect(promptMock).toHaveBeenCalledTimes(3)
+    const thirdCallArg = promptMock.mock.calls[2]?.[0] as unknown
+    const thirdBody = getCallBody(thirdCallArg)
+    expect(thirdBody.model).toEqual({
+      providerID: "openrouter",
+      modelID: "openai/gpt-5.3-codex",
     })
   })
 })

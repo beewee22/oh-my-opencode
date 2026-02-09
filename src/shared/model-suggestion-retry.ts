@@ -139,6 +139,40 @@ function isAnthropicQuotaExhausted(error: unknown): boolean {
   )
 }
 
+function isOpenAIQuotaExhausted(error: unknown): boolean {
+  const message = extractMessage(error)
+  const lower = message.toLowerCase()
+
+  const keywordHit =
+    lower.includes("rate_limit") ||
+    lower.includes("rate limit") ||
+    lower.includes("quota") ||
+    lower.includes("exceeded") ||
+    lower.includes("too many requests")
+
+  if (!keywordHit) {
+    return false
+  }
+
+  if (error && typeof error === "object") {
+    const obj = error as Record<string, unknown>
+    if (hasNumericProp(obj, "status")) {
+      return obj.status === 429
+    }
+    if (hasNumericProp(obj, "statusCode")) {
+      return obj.statusCode === 429
+    }
+    if (typeof obj.error === "object" && obj.error !== null) {
+      const errInner = obj.error as Record<string, unknown>
+      if (hasStringProp(errInner, "type") && errInner.type.includes("rate_limit")) {
+        return true
+      }
+    }
+  }
+
+  return lower.includes("rate_limit_exceeded") || lower.includes("too many requests")
+}
+
 async function listAvailableModelsFromClient(client: PromptClient): Promise<Set<string>> {
   const modelSet = new Set<string>()
 
@@ -210,6 +244,32 @@ export async function promptWithModelSuggestionRetry(
     log("[model-suggestion-retry] Anthropic cached as rate-limited but no bedrock alias found, trying anyway")
   }
 
+  if (model && model.providerID === "openai" && isProviderRateLimited("openai")) {
+    const availableModels = await listAvailableModelsFromClient(client)
+    const preferredTarget = `openrouter/openai/${model.modelID}`
+    const preferredMatch = fuzzyMatchModel(preferredTarget, availableModels, ["openrouter"])
+    if (preferredMatch) {
+      const openrouterModelID = getModelIdFromFullModel(preferredMatch)
+      log("[model-suggestion-retry] OpenAI cached as rate-limited, skipping to openrouter", {
+        original: `${model.providerID}/${model.modelID}`,
+        fallback: `openrouter/${openrouterModelID}`,
+      })
+      await client.session.prompt({
+        ...args,
+        body: {
+          ...args.body,
+          parts: args.body.parts,
+          model: {
+            providerID: "openrouter",
+            modelID: openrouterModelID,
+          },
+        },
+      })
+      return
+    }
+    log("[model-suggestion-retry] OpenAI cached as rate-limited but no openrouter model found, trying anyway")
+  }
+
   try {
     await client.session.prompt(args)
   } catch (error) {
@@ -255,6 +315,48 @@ export async function promptWithModelSuggestionRetry(
             model: {
               providerID: "amazon-bedrock",
               modelID: bedrockModelID,
+            },
+          },
+        })
+        return
+      }
+
+      const openaiModel = originalBody.model
+      if (
+        openaiModel &&
+        openaiModel.providerID === "openai" &&
+        isOpenAIQuotaExhausted(error)
+      ) {
+        markProviderRateLimited("openai")
+        const availableModels = await listAvailableModelsFromClient(client)
+
+        const preferredTarget = `openrouter/openai/${openaiModel.modelID}`
+        const preferredMatch = fuzzyMatchModel(preferredTarget, availableModels, ["openrouter"])
+        if (!preferredMatch) {
+          const openrouterConnected = Array.from(availableModels).some((m) => m.startsWith("openrouter/"))
+          log("[model-suggestion-retry] OpenAI rate limited but no openrouter model found - not retrying", {
+            original: `${openaiModel.providerID}/${openaiModel.modelID}`,
+            attempted: preferredTarget,
+            openrouterConnected,
+          })
+          throw error
+        }
+
+        const openrouterModelID = getModelIdFromFullModel(preferredMatch)
+
+        log("[model-suggestion-retry] OpenAI rate limited, retrying via openrouter", {
+          original: `${openaiModel.providerID}/${openaiModel.modelID}`,
+          fallback: `openrouter/${openrouterModelID}`,
+        })
+
+        await client.session.prompt({
+          ...args,
+          body: {
+            ...originalBody,
+            parts: originalBody.parts,
+            model: {
+              providerID: "openrouter",
+              modelID: openrouterModelID,
             },
           },
         })
