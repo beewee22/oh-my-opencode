@@ -42,3 +42,5 @@ export const AgentNameSchema = BuiltinAgentNameSchema
 export type AgentName = z.infer<typeof AgentNameSchema>
 
 export type BuiltinSkillName = z.infer<typeof BuiltinSkillNameSchema>
+
+export const BUILTIN_OVERRIDABLE_AGENT_NAMES = OverridableAgentNameSchema.options as readonly string[]

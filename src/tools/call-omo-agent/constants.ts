@@ -1,3 +1,5 @@
+export const BUILTIN_ALLOWED_AGENTS = ["explore", "librarian"] as const
+
 export const ALLOWED_AGENTS = [
   "explore",
   "librarian",
