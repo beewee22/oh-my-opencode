@@ -7,6 +7,10 @@ import type {
 import { findMatchingHooks, executeHookCommand, objectToSnakeCase, transformToolName, log } from "../../shared"
 import { DEFAULT_CONFIG } from "./plugin-config"
 import { isHookCommandDisabled, type PluginExtendedConfig } from "./config-loader"
+import type { OhMyOpenCodeConfig } from "../../config/schema"
+import { enforceGitWriteRestriction } from "./git-write-enforcement"
+import { validateGitCommit, validateGitAdd } from "./git-commit-validator"
+import { enforceKubectlWriteRestriction } from "./kubectl-write-enforcement"
 
 export interface PreToolUseContext {
   sessionId: string
@@ -16,6 +20,7 @@ export interface PreToolUseContext {
   transcriptPath?: string
   toolUseId?: string
   permissionMode?: "default" | "plan" | "acceptEdits" | "bypassPermissions"
+  agent?: string
 }
 
 export interface PreToolUseResult {
@@ -48,6 +53,57 @@ export async function executePreToolUseHooks(
   config: ClaudeHooksConfig | null,
   extendedConfig?: PluginExtendedConfig | null
 ): Promise<PreToolUseResult> {
+  const startTime = Date.now()
+
+  const ohMyOpenCodeConfig = (extendedConfig as OhMyOpenCodeConfig | undefined) ?? ({} as OhMyOpenCodeConfig)
+   const gitEnforcement = enforceGitWriteRestriction(ctx, ohMyOpenCodeConfig)
+   if (gitEnforcement.blocked) {
+     return {
+       decision: "deny",
+       reason: gitEnforcement.reason,
+       elapsedMs: Date.now() - startTime,
+       hookName: "git-write-enforcement",
+       toolName: ctx.toolName,
+       inputLines: buildInputLines(ctx.toolInput),
+     }
+   }
+
+   const commitValidation = validateGitCommit(ctx, ohMyOpenCodeConfig)
+   if (commitValidation.blocked) {
+     return {
+       decision: "deny",
+       reason: commitValidation.reason,
+       elapsedMs: Date.now() - startTime,
+       hookName: "git-commit-validator",
+       toolName: ctx.toolName,
+       inputLines: buildInputLines(ctx.toolInput),
+     }
+   }
+
+   const gitAddValidation = validateGitAdd(ctx, ohMyOpenCodeConfig)
+   if (gitAddValidation.blocked) {
+     return {
+       decision: "deny",
+       reason: gitAddValidation.reason,
+       elapsedMs: Date.now() - startTime,
+       hookName: "git-add-validator",
+       toolName: ctx.toolName,
+       inputLines: buildInputLines(ctx.toolInput),
+     }
+   }
+
+   const kubectlEnforcement = enforceKubectlWriteRestriction(ctx, ohMyOpenCodeConfig)
+  if (kubectlEnforcement.blocked) {
+    return {
+      decision: "deny",
+      reason: kubectlEnforcement.reason,
+      elapsedMs: Date.now() - startTime,
+      hookName: "kubectl-write-enforcement",
+      toolName: ctx.toolName,
+      inputLines: buildInputLines(ctx.toolInput),
+    }
+  }
+
   if (!config) {
     return { decision: "allow" }
   }
@@ -68,9 +124,9 @@ export async function executePreToolUseHooks(
     tool_input: objectToSnakeCase(ctx.toolInput),
     tool_use_id: ctx.toolUseId,
     hook_source: "opencode-plugin",
+    agent: ctx.agent,
   }
 
-  const startTime = Date.now()
   let firstHookName: string | undefined
   const inputLines = buildInputLines(ctx.toolInput)
 

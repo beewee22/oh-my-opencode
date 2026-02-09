@@ -12,7 +12,15 @@ export type ModelRequirement = {
   requiresProvider?: string[] // If set, only activates when any of these providers is connected
 }
 
-export const AGENT_MODEL_REQUIREMENTS: Record<string, ModelRequirement> = {
+const customAgentModelRequirements: Record<string, ModelRequirement> = {}
+
+export function registerCustomAgentModelRequirements(
+  requirements: Record<string, ModelRequirement>
+): void {
+  Object.assign(customAgentModelRequirements, requirements)
+}
+
+const BUILTIN_AGENT_MODEL_REQUIREMENTS: Record<string, ModelRequirement> = {
   sisyphus: {
     fallbackChain: [
       { providers: ["anthropic", "github-copilot", "opencode"], model: "claude-opus-4-6", variant: "max" },
@@ -96,6 +104,32 @@ export const AGENT_MODEL_REQUIREMENTS: Record<string, ModelRequirement> = {
     ],
   },
 }
+
+export function getAgentModelRequirements(): Record<string, ModelRequirement> {
+  return { ...BUILTIN_AGENT_MODEL_REQUIREMENTS, ...customAgentModelRequirements }
+}
+
+export const AGENT_MODEL_REQUIREMENTS: Record<string, ModelRequirement> = new Proxy(
+  BUILTIN_AGENT_MODEL_REQUIREMENTS,
+  {
+    get(target, prop: string) {
+      return customAgentModelRequirements[prop] ?? target[prop]
+    },
+    has(target, prop: string) {
+      return prop in customAgentModelRequirements || prop in target
+    },
+    ownKeys(target) {
+      return [...new Set([...Object.keys(target), ...Object.keys(customAgentModelRequirements)])]
+    },
+    getOwnPropertyDescriptor(target, prop: string) {
+      const value = customAgentModelRequirements[prop] ?? target[prop]
+      if (value !== undefined) {
+        return { configurable: true, enumerable: true, value }
+      }
+      return undefined
+    },
+  }
+)
 
 export const CATEGORY_MODEL_REQUIREMENTS: Record<string, ModelRequirement> = {
   "visual-engineering": {
