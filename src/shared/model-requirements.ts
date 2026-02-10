@@ -94,16 +94,23 @@ const BUILTIN_AGENT_MODEL_REQUIREMENTS: Record<string, ModelRequirement> = {
       { providers: ["google", "github-copilot", "opencode"], model: "gemini-3-pro", variant: "high" },
     ],
   },
-  atlas: {
-    fallbackChain: [
-      { providers: ["kimi-for-coding"], model: "k2p5" },
-      { providers: ["opencode"], model: "kimi-k2.5-free" },
-      { providers: ["anthropic", "github-copilot", "opencode"], model: "claude-sonnet-4-5" },
-      { providers: ["openai", "github-copilot", "opencode"], model: "gpt-5.2" },
-      { providers: ["google", "github-copilot", "opencode"], model: "gemini-3-pro" },
-    ],
-  },
-   "git-owner": {
+   atlas: {
+     fallbackChain: [
+       { providers: ["kimi-for-coding"], model: "k2p5" },
+       { providers: ["opencode"], model: "kimi-k2.5-free" },
+       { providers: ["anthropic", "github-copilot", "opencode"], model: "claude-sonnet-4-5" },
+       { providers: ["openai", "github-copilot", "opencode"], model: "gpt-5.2" },
+       { providers: ["google", "github-copilot", "opencode"], model: "gemini-3-pro" },
+     ],
+   },
+   daedalus: {
+     fallbackChain: [
+       { providers: ["anthropic", "github-copilot", "opencode"], model: "claude-sonnet-4-5" },
+       { providers: ["openai", "github-copilot", "opencode"], model: "gpt-5.2" },
+       { providers: ["google", "github-copilot", "opencode"], model: "gemini-3-flash" },
+     ],
+   },
+    "git-owner": {
      fallbackChain: [
        { providers: ["anthropic", "github-copilot", "opencode"], model: "claude-sonnet-4-5" },
        { providers: ["openai", "github-copilot", "opencode"], model: "gpt-5.2" },

@@ -11,6 +11,7 @@ export const BuiltinAgentNameSchema = z.enum([
   "metis",
   "momus",
   "atlas",
+  "daedalus",
   "git-owner",
   "k8s-owner",
 ])
@@ -38,6 +39,7 @@ export const OverridableAgentNameSchema = z.enum([
   "explore",
   "multimodal-looker",
   "atlas",
+  "daedalus",
   "git-owner",
   "k8s-owner",
 ])
