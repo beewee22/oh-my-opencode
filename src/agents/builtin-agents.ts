@@ -12,6 +12,7 @@ import { createMetisAgent, metisPromptMetadata } from "./metis"
 import { createAtlasAgent, atlasPromptMetadata } from "./atlas"
 import { createMomusAgent, momusPromptMetadata } from "./momus"
 import { createHephaestusAgent } from "./hephaestus"
+import { createDaedalusAgent, DAEDALUS_PROMPT_METADATA } from "./daedalus"
 import { createGitOwnerAgent, GIT_OWNER_PROMPT_METADATA } from "./git-owner"
 import { createK8sOwnerAgent, K8S_OWNER_PROMPT_METADATA } from "./k8s-owner"
 import type { AvailableCategory } from "./dynamic-agent-prompt-builder"
@@ -38,6 +39,7 @@ const agentSources: Record<BuiltinAgentName, AgentSource> = {
   // Note: Atlas is handled specially in createBuiltinAgents()
   // because it needs OrchestratorContext, not just a model string
   atlas: createAtlasAgent as AgentFactory,
+  daedalus: createDaedalusAgent,
   "git-owner": createGitOwnerAgent,
   "k8s-owner": createK8sOwnerAgent,
 }
@@ -54,6 +56,7 @@ const agentMetadata: Partial<Record<BuiltinAgentName, AgentPromptMetadata>> = {
   metis: metisPromptMetadata,
   momus: momusPromptMetadata,
   atlas: atlasPromptMetadata,
+  daedalus: DAEDALUS_PROMPT_METADATA,
   "git-owner": GIT_OWNER_PROMPT_METADATA,
   "k8s-owner": K8S_OWNER_PROMPT_METADATA,
 }

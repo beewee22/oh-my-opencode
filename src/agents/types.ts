@@ -80,6 +80,7 @@ export type BuiltinAgentName =
   | "metis"
   | "momus"
   | "atlas"
+  | "daedalus"
   | "git-owner"
   | "k8s-owner"
 
