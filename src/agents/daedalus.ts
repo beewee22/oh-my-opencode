@@ -80,11 +80,46 @@ function readRecentDecisions(filePath: string, maxEntries: number = 20): string[
   return validDecisions.slice(-maxEntries)
 }
 
+function initializeLessonsFile(filePath: string): void {
+  const resolved = resolvePath(filePath)
+  if (existsSync(resolved)) return
+
+  const dir = dirname(resolved)
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  writeFileSync(resolved, "", "utf-8")
+}
+
+function readRecentLessons(filePath: string, maxEntries: number = 20): string[] {
+  const resolved = resolvePath(filePath)
+  if (!existsSync(resolved)) return []
+
+  const content = readFileSync(resolved, "utf-8")
+  if (!content.trim()) return []
+
+  const lines = content.split("\n").filter((line) => line.trim())
+  const validLessons: string[] = []
+
+  for (const line of lines) {
+    try {
+      const parsed = JSON.parse(line)
+      validLessons.push(JSON.stringify(parsed))
+    } catch {
+      // Skip invalid JSON lines silently
+      continue
+    }
+  }
+
+  return validLessons.slice(-maxEntries)
+}
+
 function buildSystemPrompt(
   ownerContent: string | undefined,
   constraintsContent: string | undefined,
   knowledgeContents: string[] = [],
   recentDecisions?: string[],
+  recentLessons?: string[],
 ): string {
   const parts: string[] = []
 
@@ -105,6 +140,11 @@ function buildSystemPrompt(
   if (recentDecisions && recentDecisions.length > 0) {
     parts.push("\n\n## Recent Decisions (Auto-loaded)\n\n아래는 최근 기록된 결정 사항입니다. 참고하여 일관된 판단을 내리세요.\n\n")
     parts.push(recentDecisions.join("\n"))
+  }
+
+  if (recentLessons && recentLessons.length > 0) {
+    parts.push("\n\n## Lessons Learned (Auto-loaded)\n\n아래는 사용자 피드백에서 학습한 교훈입니다. 이 교훈을 참고하여 더 나은 판단을 내리세요.\n\n")
+    parts.push(recentLessons.join("\n"))
   }
 
   return parts.join("\n")
@@ -154,6 +194,7 @@ export function createDaedalusAgent(model: string, config?: CustomAgentConfig): 
   let constraintsContent: string | undefined
   const knowledgeContents: string[] = []
   let decisionsPath: string | undefined
+  let lessonsPath: string | undefined
 
   if (config?.promptPath) {
     ownerContent = safeReadFile(config.promptPath)
@@ -168,6 +209,11 @@ export function createDaedalusAgent(model: string, config?: CustomAgentConfig): 
     initializeDecisionsFile(decisionsPath)
   }
 
+  if (config?.lessonsPath) {
+    lessonsPath = config.lessonsPath
+    initializeLessonsFile(lessonsPath)
+  }
+
   if (config?.knowledgePaths && config.knowledgePaths.length > 0) {
     for (const knowledgePath of config.knowledgePaths) {
       const content = safeReadFile(knowledgePath)
@@ -178,7 +224,8 @@ export function createDaedalusAgent(model: string, config?: CustomAgentConfig): 
   }
 
   const recentDecisions = decisionsPath ? readRecentDecisions(decisionsPath, 20) : []
-  const systemPrompt = buildSystemPrompt(ownerContent, constraintsContent, knowledgeContents, recentDecisions)
+  const recentLessons = lessonsPath ? readRecentLessons(lessonsPath, 20) : []
+  const systemPrompt = buildSystemPrompt(ownerContent, constraintsContent, knowledgeContents, recentDecisions, recentLessons)
 
   return {
     description:

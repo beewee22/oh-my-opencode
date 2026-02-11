@@ -203,24 +203,59 @@ describe("createDaedalusAgent", () => {
     expect(agent.description).toContain("Daedalus")
   })
 
-  test("initializes decisions.jsonl if missing", () => {
-    // given
-    const decisionsPath = resolve(testDir, "decisions.jsonl")
-    expect(existsSync(decisionsPath)).toBe(false)
+   test("initializes decisions.jsonl if missing", () => {
+     // given
+     const decisionsPath = resolve(testDir, "decisions.jsonl")
+     expect(existsSync(decisionsPath)).toBe(false)
 
-    const model = "anthropic/claude-opus-4-5"
-    const config = {
-      model,
-      decisionsPath,
-    }
+     const model = "anthropic/claude-opus-4-5"
+     const config = {
+       model,
+       decisionsPath,
+     }
 
-    // when
-    createDaedalusAgent(model, config)
+     // when
+     createDaedalusAgent(model, config)
 
-    // then
-    expect(existsSync(decisionsPath)).toBe(true)
-  })
-})
+     // then
+     expect(existsSync(decisionsPath)).toBe(true)
+   })
+
+   test("initializes lessons.jsonl if missing", () => {
+     // given
+     const lessonsPath = resolve(testDir, "lessons.jsonl")
+     expect(existsSync(lessonsPath)).toBe(false)
+
+     const model = "anthropic/claude-opus-4-5"
+     const config = {
+       model,
+       lessonsPath,
+     }
+
+     // when
+     createDaedalusAgent(model, config)
+
+     // then
+     expect(existsSync(lessonsPath)).toBe(true)
+   })
+
+   test("createDaedalusAgent works without lessonsPath (backward compat)", () => {
+     // given
+     const model = "anthropic/claude-opus-4-5"
+     const config = {
+       model,
+       // No lessonsPath provided
+     }
+
+     // when
+     const agent = createDaedalusAgent(model, config)
+
+     // then - should create successfully without lessons
+     expect(agent.prompt).toBeDefined()
+     expect(agent.prompt).toContain("Daedalus")
+     expect(agent.prompt).not.toContain("Lessons Learned")
+   })
+ })
 
 describe("readRecentDecisions", () => {
   let testDir: string
@@ -359,6 +394,171 @@ describe("readRecentDecisions", () => {
   })
 })
 
+describe("readRecentLessons", () => {
+  let testDir: string
+
+  beforeEach(() => {
+    testDir = resolve(tmpdir(), `daedalus-test-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+  })
+
+  afterEach(() => {
+    if (existsSync(testDir)) {
+      rmSync(testDir, { recursive: true, force: true })
+    }
+  })
+
+  test("reads lessons from lessons.jsonl file", () => {
+    // given
+    const lessonsPath = resolve(testDir, "lessons.jsonl")
+    const lessons: string[] = []
+    for (let i = 1; i <= 5; i++) {
+      lessons.push(JSON.stringify({ timestamp: `2026-02-10T10:${i.toString().padStart(2, "0")}:00Z`, source: "user-feedback", lesson: `Lesson ${i}`, context: `Context ${i}`, confidence: "high" }))
+    }
+    writeFileSync(lessonsPath, lessons.join("\n"))
+
+    const model = "anthropic/claude-opus-4-5"
+    const config = {
+      model,
+      lessonsPath,
+    }
+
+    // when
+    const agent = createDaedalusAgent(model, config)
+
+    // then
+    expect(agent.prompt).toContain("Lessons Learned")
+    expect(agent.prompt).toContain("Lesson 1")
+    expect(agent.prompt).toContain("Lesson 5")
+  })
+
+  test("returns empty array for empty file", () => {
+    // given
+    const lessonsPath = resolve(testDir, "lessons.jsonl")
+    writeFileSync(lessonsPath, "")
+
+    const model = "anthropic/claude-opus-4-5"
+    const config = {
+      model,
+      lessonsPath,
+    }
+
+    // when
+    const agent = createDaedalusAgent(model, config)
+
+    // then
+    expect(agent.prompt).not.toContain("Lessons Learned")
+  })
+
+  test("returns empty array for nonexistent file", () => {
+    // given
+    const lessonsPath = resolve(testDir, "nonexistent.jsonl")
+
+    const model = "anthropic/claude-opus-4-5"
+    const config = {
+      model,
+      lessonsPath,
+    }
+
+    // when
+    const agent = createDaedalusAgent(model, config)
+
+    // then
+    expect(agent.prompt).toBeDefined()
+    expect(agent.prompt).not.toContain("Lessons Learned")
+  })
+
+  test("skips invalid JSON lines silently", () => {
+    // given
+    const lessonsPath = resolve(testDir, "lessons.jsonl")
+    const lines = [
+      JSON.stringify({ timestamp: "2026-02-10T10:01:00Z", source: "user-feedback", lesson: "Lesson 1", context: "Context 1", confidence: "high" }),
+      "not json",
+      JSON.stringify({ timestamp: "2026-02-10T10:02:00Z", source: "user-feedback", lesson: "Lesson 2", context: "Context 2", confidence: "high" }),
+      "",
+      JSON.stringify({ timestamp: "2026-02-10T10:03:00Z", source: "user-feedback", lesson: "Lesson 3", context: "Context 3", confidence: "high" }),
+      "{ incomplete json",
+    ]
+    writeFileSync(lessonsPath, lines.join("\n"))
+
+    const model = "anthropic/claude-opus-4-5"
+    const config = {
+      model,
+      lessonsPath,
+    }
+
+    // when
+    const agent = createDaedalusAgent(model, config)
+
+    // then
+    expect(agent.prompt).toContain("Lessons Learned")
+    expect(agent.prompt).toContain("Lesson 1")
+    expect(agent.prompt).toContain("Lesson 2")
+    expect(agent.prompt).toContain("Lesson 3")
+    expect(agent.prompt).not.toContain("not json")
+    expect(agent.prompt).not.toContain("incomplete json")
+  })
+
+  test("respects maxEntries limit (truncates to last N)", () => {
+    // given
+    const lessonsPath = resolve(testDir, "lessons.jsonl")
+    const lessons: string[] = []
+    for (let i = 1; i <= 25; i++) {
+      lessons.push(JSON.stringify({ timestamp: `2026-02-10T10:${(i % 60).toString().padStart(2, "0")}:00Z`, source: "user-feedback", lesson: `Lesson ${i}`, context: `Context ${i}`, confidence: "high" }))
+    }
+    writeFileSync(lessonsPath, lessons.join("\n"))
+
+    const model = "anthropic/claude-opus-4-5"
+    const config = {
+      model,
+      lessonsPath,
+    }
+
+    // when
+    const agent = createDaedalusAgent(model, config)
+
+    // then - should include only the most recent 20 lessons
+    expect(agent.prompt).toContain("Lessons Learned")
+    expect(agent.prompt).toContain("Lesson 25") // Most recent
+    expect(agent.prompt).toContain("Lesson 6") // 20th from end
+    expect(agent.prompt).not.toContain("Lesson 5") // Should be excluded (21st from end)
+  })
+
+  test("handles mixed valid/invalid entries", () => {
+    // given
+    const lessonsPath = resolve(testDir, "lessons.jsonl")
+    const lines = [
+      JSON.stringify({ timestamp: "2026-02-10T10:01:00Z", source: "user-feedback", lesson: "Valid 1", context: "Context 1", confidence: "high" }),
+      "garbage line",
+      JSON.stringify({ timestamp: "2026-02-10T10:02:00Z", source: "user-feedback", lesson: "Valid 2", context: "Context 2", confidence: "medium" }),
+      "",
+      "{ broken",
+      JSON.stringify({ timestamp: "2026-02-10T10:03:00Z", source: "user-feedback", lesson: "Valid 3", context: "Context 3", confidence: "low" }),
+      "null",
+      JSON.stringify({ timestamp: "2026-02-10T10:04:00Z", source: "user-feedback", lesson: "Valid 4", context: "Context 4", confidence: "high" }),
+    ]
+    writeFileSync(lessonsPath, lines.join("\n"))
+
+    const model = "anthropic/claude-opus-4-5"
+    const config = {
+      model,
+      lessonsPath,
+    }
+
+    // when
+    const agent = createDaedalusAgent(model, config)
+
+    // then
+    expect(agent.prompt).toContain("Lessons Learned")
+    expect(agent.prompt).toContain("Valid 1")
+    expect(agent.prompt).toContain("Valid 2")
+    expect(agent.prompt).toContain("Valid 3")
+    expect(agent.prompt).toContain("Valid 4")
+    expect(agent.prompt).not.toContain("garbage line")
+    expect(agent.prompt).not.toContain("broken")
+  })
+})
+
 describe("buildSystemPrompt with decisions", () => {
   let testDir: string
 
@@ -413,19 +613,109 @@ describe("buildSystemPrompt with decisions", () => {
     expect(agent.prompt).not.toContain("최근 기록된 결정 사항입니다")
   })
 
-  test("omits Recent Decisions section when undefined", () => {
-    // given
-    const model = "anthropic/claude-opus-4-5"
-    const config = {
-      model,
-      // No decisionsPath provided
-    }
+   test("omits Recent Decisions section when undefined", () => {
+     // given
+     const model = "anthropic/claude-opus-4-5"
+     const config = {
+       model,
+       // No decisionsPath provided
+     }
 
-    // when
-    const agent = createDaedalusAgent(model, config)
+     // when
+     const agent = createDaedalusAgent(model, config)
 
-    // then
-    expect(agent.prompt).not.toContain("Recent Decisions")
-    expect(agent.prompt).not.toContain("최근 기록된 결정 사항입니다")
-  })
-})
+     // then
+     expect(agent.prompt).not.toContain("Recent Decisions")
+     expect(agent.prompt).not.toContain("최근 기록된 결정 사항입니다")
+   })
+ })
+
+ describe("buildSystemPrompt with lessons", () => {
+   let testDir: string
+
+   beforeEach(() => {
+     testDir = resolve(tmpdir(), `daedalus-test-${Date.now()}`)
+     mkdirSync(testDir, { recursive: true })
+   })
+
+   afterEach(() => {
+     if (existsSync(testDir)) {
+       rmSync(testDir, { recursive: true, force: true })
+     }
+   })
+
+   test("includes Lessons Learned section when lessons provided", () => {
+     // given
+     const lessonsPath = resolve(testDir, "lessons.jsonl")
+     const lesson = JSON.stringify({ timestamp: "2026-02-10T10:00:00Z", source: "user-feedback", lesson: "Always check KEDA before scaling", context: "HPA conflicts", confidence: "high" })
+     writeFileSync(lessonsPath, lesson)
+
+     const model = "anthropic/claude-opus-4-5"
+     const config = {
+       model,
+       lessonsPath,
+     }
+
+     // when
+     const agent = createDaedalusAgent(model, config)
+
+     // then
+     expect(agent.prompt).toContain("## Lessons Learned (Auto-loaded)")
+     expect(agent.prompt).toContain("사용자 피드백에서 학습한 교훈입니다")
+     expect(agent.prompt).toContain("Always check KEDA before scaling")
+   })
+
+   test("omits Lessons Learned section when empty array", () => {
+     // given
+     const lessonsPath = resolve(testDir, "lessons.jsonl")
+     writeFileSync(lessonsPath, "")
+
+     const model = "anthropic/claude-opus-4-5"
+     const config = {
+       model,
+       lessonsPath,
+     }
+
+     // when
+     const agent = createDaedalusAgent(model, config)
+
+     // then
+     expect(agent.prompt).not.toContain("Lessons Learned")
+     expect(agent.prompt).not.toContain("사용자 피드백에서 학습한 교훈입니다")
+   })
+
+   test("includes both decisions and lessons in prompt", () => {
+     // given
+     const decisionsPath = resolve(testDir, "decisions.jsonl")
+     const lessonsPath = resolve(testDir, "lessons.jsonl")
+
+     const decision = JSON.stringify({ timestamp: "2026-02-10T10:00:00Z", operation: "scale", decision: "Scaled to 5 replicas" })
+     const lesson = JSON.stringify({ timestamp: "2026-02-10T10:00:00Z", source: "user-feedback", lesson: "Always check KEDA before scaling", context: "HPA conflicts", confidence: "high" })
+
+     writeFileSync(decisionsPath, decision)
+     writeFileSync(lessonsPath, lesson)
+
+     const model = "anthropic/claude-opus-4-5"
+     const config = {
+       model,
+       decisionsPath,
+       lessonsPath,
+     }
+
+     // when
+     const agent = createDaedalusAgent(model, config)
+
+     // then
+     expect(agent.prompt).toContain("## Recent Decisions (Auto-loaded)")
+     expect(agent.prompt).toContain("Scaled to 5 replicas")
+     expect(agent.prompt).toContain("## Lessons Learned (Auto-loaded)")
+     expect(agent.prompt).toContain("Always check KEDA before scaling")
+
+     // Verify lessons section appears after decisions section
+     if (agent.prompt) {
+       const decisionsIndex = agent.prompt.indexOf("## Recent Decisions")
+       const lessonsIndex = agent.prompt.indexOf("## Lessons Learned")
+       expect(decisionsIndex).toBeLessThan(lessonsIndex)
+     }
+   })
+ })
