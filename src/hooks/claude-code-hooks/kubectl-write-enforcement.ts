@@ -38,22 +38,48 @@ export function enforceKubectlWriteRestriction(
       blocked: true,
       reason: `Kubectl dangerous operation blocked. You cannot execute dangerous kubectl operations directly.
 
-REQUIRED: Delegate to k8s-owner agent using task():
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CRITICAL: DO NOT ask the user to execute kubectl commands manually.
+DO NOT say "사용자님이 실행해주세요" or provide manual command instructions.
+
+YOU MUST DELEGATE using task() - this is NOT optional.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+REQUIRED ACTION: Delegate to k8s-owner agent using task():
 
 task(
   subagent_type="k8s-owner",
   load_skills=[],
+  run_in_background=false,
   prompt="Execute the kubectl operation: [describe what you were trying to do]"
 )
 
-Example:
+CONCRETE EXAMPLE:
 task(
   subagent_type="k8s-owner",
   load_skills=[],
-  prompt="Scale deployment xyz to 3 replicas. Check for KEDA/HPA conflicts first."
+  run_in_background=false,
+  prompt="Scale deployment xyz to 3 replicas in dev-mss-cluster namespace dev-member. Check for KEDA/HPA conflicts first."
 )
 
-DO NOT attempt kubectl dangerous operations directly. ALL dangerous operations (scale, delete, apply, etc.) MUST go through k8s-owner.`,
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FORBIDDEN RESPONSES:
+❌ "사용자님이 kubectl scale을 실행해주세요"
+❌ "Please run: kubectl apply -f ..."
+❌ "You can execute: kubectl delete pod ..."
+❌ Providing kubectl commands for user to copy-paste
+
+CORRECT RESPONSE:
+✅ Immediately call task() with k8s-owner
+✅ Provide full context (cluster, namespace, resource, action)
+✅ Continue work after delegation completes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ALL dangerous kubectl operations (scale, delete, apply, patch, etc.) MUST go through k8s-owner. NO EXCEPTIONS.`,
     }
   }
 
@@ -62,22 +88,48 @@ DO NOT attempt kubectl dangerous operations directly. ALL dangerous operations (
       blocked: true,
       reason: `Kubectl context switch blocked. You cannot switch kubectl contexts directly.
 
-REQUIRED: Delegate to k8s-owner agent using task():
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CRITICAL: DO NOT ask the user to switch kubectl context manually.
+DO NOT say "사용자님이 실행해주세요" or provide manual command instructions.
+
+YOU MUST DELEGATE using task() - this is NOT optional.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+REQUIRED ACTION: Delegate to k8s-owner agent using task():
 
 task(
   subagent_type="k8s-owner",
   load_skills=[],
-  prompt="Switch kubectl context to: [cluster-name]"
+  run_in_background=false,
+  prompt="Switch kubectl context to: [cluster-name]. Show current context first."
 )
 
-Example:
+CONCRETE EXAMPLE:
 task(
   subagent_type="k8s-owner",
   load_skills=[],
-  prompt="Switch kubectl context to prd-mss-cluster. Show current context first."
+  run_in_background=false,
+  prompt="Switch kubectl context to prd-mss-cluster. Confirm current context is dev-mss-cluster before switching."
 )
 
-DO NOT attempt context switching directly. ALL context switches MUST go through k8s-owner for safety.`,
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FORBIDDEN RESPONSES:
+❌ "사용자님이 kubectl config use-context를 실행해주세요"
+❌ "Please run: kubectl config use-context prd-mss-cluster"
+❌ "You can execute: kubectl config set-context ..."
+❌ Providing context switch commands for user to copy-paste
+
+CORRECT RESPONSE:
+✅ Immediately call task() with k8s-owner
+✅ Specify target cluster and confirmation requirements
+✅ Continue work after delegation completes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ALL kubectl context switches MUST go through k8s-owner for safety verification. NO EXCEPTIONS.`,
     }
   }
 
