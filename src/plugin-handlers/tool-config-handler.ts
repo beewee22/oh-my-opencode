@@ -90,6 +90,16 @@ export function applyToolConfig(params: {
       ...denyTodoTools,
     };
   }
+  if (params.agentResult.daedalus) {
+    const agent = params.agentResult.daedalus as AgentWithPermission;
+    agent.permission = {
+      ...agent.permission,
+      call_omo_agent: "deny",
+      task: "allow",
+      question: questionPermission,
+      ...denyTodoTools,
+    };
+  }
 
   params.config.permission = {
     ...(params.config.permission as Record<string, unknown>),

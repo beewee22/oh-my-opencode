@@ -339,6 +339,40 @@ describe("Agent permission defaults", () => {
     expect(agentConfig.hephaestus).toBeDefined()
     expect(agentConfig.hephaestus.permission?.task).toBe("allow")
   })
+
+  test("daedalus should allow task", async () => {
+    // #given
+    const createBuiltinAgentsMock = agents.createBuiltinAgents as unknown as {
+      mockResolvedValue: (value: Record<string, unknown>) => void
+    }
+    createBuiltinAgentsMock.mockResolvedValue({
+      sisyphus: { name: "sisyphus", prompt: "test", mode: "primary" },
+      daedalus: { name: "daedalus", prompt: "test", mode: "primary" },
+      oracle: { name: "oracle", prompt: "test", mode: "subagent" },
+    })
+    const pluginConfig: OhMyOpenCodeConfig = {}
+    const config: Record<string, unknown> = {
+      model: "anthropic/claude-opus-4-6",
+      agent: {},
+    }
+    const handler = createConfigHandler({
+      ctx: { directory: "/tmp" },
+      pluginConfig,
+      modelCacheState: {
+        anthropicContext1MEnabled: false,
+        modelContextLimitsCache: new Map(),
+      },
+    })
+
+    // #when
+    await handler(config)
+
+    // #then
+    const agentConfig = config.agent as Record<string, { permission?: Record<string, string> }>
+    expect(agentConfig.daedalus).toBeDefined()
+    expect(agentConfig.daedalus.permission?.task).toBe("allow")
+    expect(agentConfig.daedalus.permission?.call_omo_agent).toBe("deny")
+  })
 })
 
 describe("Prometheus category config resolution", () => {
