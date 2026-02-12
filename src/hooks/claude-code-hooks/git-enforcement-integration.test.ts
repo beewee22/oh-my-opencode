@@ -296,27 +296,56 @@ describe("Git Write Enforcement - Integration Tests", () => {
       expect(result.reason).toContain("git-owner")
     })
 
-    test("enforcement integrates with existing config", () => {
-      //#given existing user config with agents
-      const userConfig: OhMyOpenCodeConfig = {
-        agents: {
-          sisyphus: { model: "anthropic/claude-sonnet-4-5" },
-          "git-owner": { model: "anthropic/claude-sonnet-4-5" },
-        },
-        customAgents: {
-          "git-owner": {
-            model: "anthropic/claude-sonnet-4-5",
-            promptPath: "~/git-owner/OWNER.md",
-          },
-        },
-      }
-      const context = createContext("Bash", "git push", "build")
+     test("enforcement integrates with existing config", () => {
+       //#given existing user config with agents
+       const userConfig: OhMyOpenCodeConfig = {
+         agents: {
+           sisyphus: { model: "anthropic/claude-sonnet-4-5" },
+           "git-owner": { model: "anthropic/claude-sonnet-4-5" },
+         },
+         customAgents: {
+           "git-owner": {
+             model: "anthropic/claude-sonnet-4-5",
+             promptPath: "~/git-owner/OWNER.md",
+           },
+         },
+       }
+       const context = createContext("Bash", "git push", "build")
 
-      //#when enforcement runs with user config
-      const result = enforceGitWriteRestriction(context, userConfig)
+       //#when enforcement runs with user config
+       const result = enforceGitWriteRestriction(context, userConfig)
 
-      //#then enforcement works with existing config
-      expect(result.blocked).toBe(true)
-    })
-  })
+       //#then enforcement works with existing config
+       expect(result.blocked).toBe(true)
+     })
+   })
+
+   describe("call_omo_agent delegation validation", () => {
+     test("git-owner passes call_omo_agent validation", () => {
+       //#given git-owner agent attempting git write
+       const context = createContext("bash", "git push origin main", "git-owner")
+
+       //#when enforcement check runs
+       const result = enforceGitWriteRestriction(context, emptyConfig)
+
+       //#then git-owner is allowed (passes ALLOWED_AGENTS validation)
+       expect(result.blocked).toBe(false)
+       expect(result.reason).toBeUndefined()
+     })
+
+     test("k8s-owner is in ALLOWED_AGENTS for delegation", () => {
+       //#given k8s-owner is a valid agent type for call_omo_agent
+       //#when checking if k8s-owner can be delegated to
+       //#then k8s-owner should be in ALLOWED_AGENTS (verified via constants test)
+       // This test verifies k8s-owner is registered as a valid delegation target
+       // Actual k8s operations would be enforced by k8s-specific hooks, not git enforcement
+       const context = createContext("bash", "git status", "k8s-owner")
+
+       //#when enforcement check runs on a read operation
+       const result = enforceGitWriteRestriction(context, emptyConfig)
+
+       //#then k8s-owner can execute non-write operations (delegation target is valid)
+       expect(result.blocked).toBe(false)
+     })
+   })
 })

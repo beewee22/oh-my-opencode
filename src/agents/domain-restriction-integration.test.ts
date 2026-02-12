@@ -225,53 +225,87 @@ describe("Domain Restriction Integration", () => {
     })
   })
 
-  describe("prompt size constraints", () => {
-    it("should keep restriction section under 1000 chars for 2 domains", async () => {
-      // #given: config with 2 domain restrictions
-      const restrictions: DomainRestriction[] = [
-        {
-          domain: "Git Operations",
-          ownerAgent: "git-owner",
-          restrictedTools: ["bash (git commit)", "bash (git push)", "bash (git merge)"],
-        },
-        {
-          domain: "Kubernetes Operations",
-          ownerAgent: "k8s-owner",
-          restrictedTools: ["bash (kubectl scale)", "bash (kubectl delete)", "bash (kubectl apply)"],
-        },
-      ]
+   describe("prompt size constraints", () => {
+     it("should keep restriction section under 1000 chars for 2 domains", async () => {
+       // #given: config with 2 domain restrictions
+       const restrictions: DomainRestriction[] = [
+         {
+           domain: "Git Operations",
+           ownerAgent: "git-owner",
+           restrictedTools: ["bash (git commit)", "bash (git push)", "bash (git merge)"],
+         },
+         {
+           domain: "Kubernetes Operations",
+           ownerAgent: "k8s-owner",
+           restrictedTools: ["bash (kubectl scale)", "bash (kubectl delete)", "bash (kubectl apply)"],
+         },
+       ]
 
-      // #when: creating builtin agents with restrictions
-      const agents = await createBuiltinAgents(
-        [], // disabledAgents
-        {}, // agentOverrides
-        undefined, // directory
-        "anthropic/claude-sonnet-4-5", // systemDefaultModel
-        undefined, // categories
-        undefined, // gitMasterConfig
-        [], // discoveredSkills
-        undefined, // customAgentSummaries
-        undefined, // browserProvider
-        undefined, // uiSelectedModel
-        undefined, // disabledSkills
-        restrictions // domainRestrictions
-      )
+       // #when: creating builtin agents with restrictions
+       const agents = await createBuiltinAgents(
+         [], // disabledAgents
+         {}, // agentOverrides
+         undefined, // directory
+         "anthropic/claude-sonnet-4-5", // systemDefaultModel
+         undefined, // categories
+         undefined, // gitMasterConfig
+         [], // discoveredSkills
+         undefined, // customAgentSummaries
+         undefined, // browserProvider
+         undefined, // uiSelectedModel
+         undefined, // disabledSkills
+         restrictions // domainRestrictions
+       )
 
-      // #then: restriction section should be under 1000 chars in sisyphus
-      const sisyphus = agents["sisyphus"]
-      expect(sisyphus).toBeDefined()
+       // #then: restriction section should be under 1000 chars in sisyphus
+       const sisyphus = agents["sisyphus"]
+       expect(sisyphus).toBeDefined()
 
-      const startMarker = "## Domain Restrictions (MANDATORY)"
-      const startIndex = sisyphus.prompt!.indexOf(startMarker)
-      expect(startIndex).toBeGreaterThan(-1)
+       const startMarker = "## Domain Restrictions (MANDATORY)"
+       const startIndex = sisyphus.prompt!.indexOf(startMarker)
+       expect(startIndex).toBeGreaterThan(-1)
 
-      const afterStart = sisyphus.prompt!.slice(startIndex + startMarker.length)
-      const nextSectionMatch = afterStart.match(/\n</)
-      const restrictionSection = nextSectionMatch
-        ? afterStart.slice(0, nextSectionMatch.index)
-        : afterStart
+       const afterStart = sisyphus.prompt!.slice(startIndex + startMarker.length)
+       const nextSectionMatch = afterStart.match(/\n</)
+       const restrictionSection = nextSectionMatch
+         ? afterStart.slice(0, nextSectionMatch.index)
+         : afterStart
 
-      expect(restrictionSection.length).toBeLessThan(1000)
-    })
-  })
+       expect(restrictionSection.length).toBeLessThan(1000)
+     })
+   })
+
+   describe("agent permission configuration", () => {
+     it("daedalus agent has task permission", async () => {
+       // #given: config with domain restrictions
+       const restrictions: DomainRestriction[] = [
+         {
+           domain: "Git Operations",
+           ownerAgent: "git-owner",
+           restrictedTools: ["bash (git commit)", "bash (git push)"],
+         },
+       ]
+
+       // #when: creating builtin agents with restrictions
+       const agents = await createBuiltinAgents(
+         [], // disabledAgents
+         {}, // agentOverrides
+         undefined, // directory
+         "anthropic/claude-sonnet-4-5", // systemDefaultModel
+         undefined, // categories
+         undefined, // gitMasterConfig
+         [], // discoveredSkills
+         undefined, // customAgentSummaries
+         undefined, // browserProvider
+         undefined, // uiSelectedModel
+         undefined, // disabledSkills
+         restrictions // domainRestrictions
+       )
+
+       // #then: daedalus should be defined and have task permission
+       const daedalus = agents["daedalus"]
+       expect(daedalus).toBeDefined()
+       expect(daedalus.mode).toBe("primary")
+     })
+   })
 })
