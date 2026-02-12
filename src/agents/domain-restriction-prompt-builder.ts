@@ -19,7 +19,15 @@ export function buildDomainRestrictionSection(
     rows.push("");
     rows.push("**Delegate using**:");
     rows.push("```");
-    rows.push(`task(subagent_type="${restriction.ownerAgent}", prompt="...")`);
+    
+    // Generate load_skills based on ownerAgent type
+    const loadSkills = restriction.ownerAgent === "git-owner" 
+      ? '["git-master"]' 
+      : "[]";
+    
+    rows.push(
+      `task(subagent_type="${restriction.ownerAgent}", load_skills=${loadSkills}, run_in_background=false, prompt="[describe operation]")`
+    );
     rows.push("```");
     rows.push("");
   }

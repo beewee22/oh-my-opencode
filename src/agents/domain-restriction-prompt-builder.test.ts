@@ -117,6 +117,44 @@ describe("buildDomainRestrictionSection", () => {
     expect(result).toContain("task(");
   });
 
+  test("includes complete delegation template with load_skills for git-owner", () => {
+    // #given one domain restriction with git-owner
+    const input: DomainRestriction[] = [
+      {
+        domain: "git",
+        ownerAgent: "git-owner",
+        restrictedTools: ["mcp_bash"],
+      },
+    ];
+
+    // #when building section
+    const result = buildDomainRestrictionSection(input);
+
+    // #then includes complete template with git-master skill
+    expect(result).toContain('load_skills=["git-master"]');
+    expect(result).toContain("run_in_background=false");
+    expect(result).toContain('prompt="[describe operation]"');
+  });
+
+  test("includes complete delegation template with empty load_skills for non-git-owner", () => {
+    // #given one domain restriction with k8s-owner
+    const input: DomainRestriction[] = [
+      {
+        domain: "infrastructure",
+        ownerAgent: "k8s-owner",
+        restrictedTools: ["kubectl"],
+      },
+    ];
+
+    // #when building section
+    const result = buildDomainRestrictionSection(input);
+
+    // #then includes complete template with empty load_skills
+    expect(result).toContain("load_skills=[]");
+    expect(result).toContain("run_in_background=false");
+    expect(result).toContain('prompt="[describe operation]"');
+  });
+
   test("handles multiple domains without excessive length", () => {
     // #given two domain restrictions
     const input: DomainRestriction[] = [
